@@ -247,6 +247,10 @@ pub(super) fn prepare_window_render(
             #[cfg(target_os = "macos")]
             {
                 let punched: Vec<usize> = rt.surfaces.iter().filter(|d| d.surface.is_layered()).map(|d| d.surface.key()).collect();
+                let scale = rt.env.scale.max(1.0) as f32;
+                for d in rt.surfaces.iter().filter(|d| d.surface.is_layered()) {
+                    d.surface.set_hit(Some(surface_hit(d, &rt.instances, scale)));
+                }
                 if !punched.is_empty() && !renderer.surface_punch_ready() {
                     layers_again = true;
                 }
@@ -525,4 +529,21 @@ pub(super) fn record_trace_frame(
         return true;
     }
     false
+}
+
+/// Where a layered surface drew and what the frame drew over it there, in window points: every
+/// instance after it whose clipped box meets its clipped place.
+#[cfg(target_os = "macos")]
+fn surface_hit(d: &crate::native_surface::SurfaceDraw, instances: &[crate::render::Instance], scale: f32) -> crate::native_surface::SurfaceHit {
+    let meet = |a: [f32; 4], b: [f32; 4]| [a[0].max(b[0]), a[1].max(b[1]), a[2].min(b[2]), a[3].min(b[3])];
+    let empty = |r: &[f32; 4]| r[2] <= r[0] || r[3] <= r[1];
+    let points = |r: [f32; 4]| r.map(|v| v / scale);
+    let visible = meet([d.rect[0], d.rect[1], d.rect[0] + d.rect[2], d.rect[1] + d.rect[3]], d.clip);
+    let covers = instances.get(d.before_instance as usize..).unwrap_or_default().iter()
+        .map(|i| meet([i.rect[0], i.rect[1], i.rect[0] + i.rect[2], i.rect[1] + i.rect[3]], i.clip))
+        .map(|r| meet(r, visible))
+        .filter(|r| !empty(r))
+        .map(points)
+        .collect();
+    crate::native_surface::SurfaceHit { visible: points(visible), covers }
 }

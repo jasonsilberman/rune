@@ -149,6 +149,14 @@ pub struct FrameTiming {
     pub gpu_end_seconds: Option<f64>,
 }
 pub type FrameObserver = Arc<dyn Fn(FrameTiming) + Send + Sync>;
+
+/// A layered surface's place in the last frame and what the window drew over it, as
+/// `[x0, y0, x1, y1]` in window points.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SurfaceHit {
+    pub visible: [f32; 4],
+    pub covers: Vec<[f32; 4]>,
+}
 struct State {
     latest: Option<Arc<Frame>>,
     revision: u64,
@@ -162,6 +170,9 @@ struct State {
     /// The app shows its own native layer under the window in this surface's place, so the
     /// window punches the place out instead of drawing the frame.
     layered: bool,
+    /// Where the window last drew this layered surface and what it drew over it, as
+    /// `[x0, y0, x1, y1]` in window points (`SurfaceHit`).
+    hit: Option<SurfaceHit>,
     /// The player feeding this surface, pulled once per frame that draws it.
     video: Option<Arc<crate::video::Shared>>,
 }
@@ -179,6 +190,7 @@ impl Default for State {
             error: None,
             mirrored: false,
             layered: false,
+            hit: None,
             video: None,
         }
     }
@@ -291,6 +303,18 @@ impl NativeSurface {
     }
     pub fn is_layered(&self) -> bool {
         self.0.lock().unwrap().layered
+    }
+    #[doc(hidden)]
+    pub fn set_hit(&self, hit: Option<SurfaceHit>) {
+        self.0.lock().unwrap().hit = hit;
+    }
+    /// Whether window point (`x`, `y`), in points, shows this layered surface as of the last
+    /// frame: inside its drawn, clipped place and under nothing the window drew over it there
+    /// (a popover, its shadow, a toast). A native view under the window takes a press here; any
+    /// other point is the window's.
+    pub fn shows_at(&self, x: f32, y: f32) -> bool {
+        let inside = |r: &[f32; 4]| x >= r[0] && x < r[2] && y >= r[1] && y < r[3];
+        self.0.lock().unwrap().hit.as_ref().is_some_and(|h| inside(&h.visible) && !h.covers.iter().any(inside))
     }
     pub fn is_mirrored(&self) -> bool {
         self.0.lock().unwrap().mirrored
