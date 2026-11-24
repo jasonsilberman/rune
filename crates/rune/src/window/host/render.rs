@@ -231,7 +231,7 @@ pub(super) fn prepare_window_render(
     let images_changed = host.app.rt().images.pages.iter().any(|p| p.dirty.is_some());
     {
         let rt = host.app.rt_mut();
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "macos"))]
         let mut layers_again = false;
         prepare_gpu_resources_with(renderer, gpu, rt, size, true, |renderer, rt| {
             // Playing clips on their own layer (`video_layer`): the surfaces this frame punches out.
@@ -244,12 +244,20 @@ pub(super) fn prepare_window_render(
                 renderer.set_punched_surfaces(layers.punched);
                 layers_again = layers.again;
             }
-            #[cfg(not(target_os = "windows"))]
+            #[cfg(target_os = "macos")]
+            {
+                let punched: Vec<usize> = rt.surfaces.iter().filter(|d| d.surface.is_layered()).map(|d| d.surface.key()).collect();
+                if !punched.is_empty() && !renderer.surface_punch_ready() {
+                    layers_again = true;
+                }
+                renderer.set_punched_surfaces(punched);
+            }
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
             let _ = (renderer, rt);
         });
-        #[cfg(target_os = "windows")]
+        #[cfg(any(target_os = "windows", target_os = "macos"))]
         { info.animating |= layers_again; }
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         let _ = info;
         // The paint the instances come from, and on a loop-only frame the only ones it changed.
         renderer.next_instances(rt.paint_count(), looped.cloned());

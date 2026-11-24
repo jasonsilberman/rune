@@ -159,6 +159,9 @@ struct State {
     completed: u64,
     error: Option<String>,
     mirrored: bool,
+    /// The app shows its own native layer under the window in this surface's place, so the
+    /// window punches the place out instead of drawing the frame.
+    layered: bool,
     /// The player feeding this surface, pulled once per frame that draws it.
     video: Option<Arc<crate::video::Shared>>,
 }
@@ -175,6 +178,7 @@ impl Default for State {
             completed: 0,
             error: None,
             mirrored: false,
+            layered: false,
             video: None,
         }
     }
@@ -278,6 +282,15 @@ impl NativeSurface {
         if let Some(wake) = wake {
             wake();
         }
+    }
+    /// Punch this surface's place out of the window's pixels, so a native layer the app keeps
+    /// under the window shows there; the window's corners, clips and anything drawn over the
+    /// place stay the window's own. Off, the surface draws its latest frame as usual.
+    pub fn set_layered(&self, layered: bool) {
+        self.0.lock().unwrap().layered = layered;
+    }
+    pub fn is_layered(&self) -> bool {
+        self.0.lock().unwrap().layered
     }
     pub fn is_mirrored(&self) -> bool {
         self.0.lock().unwrap().mirrored

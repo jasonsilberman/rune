@@ -58,9 +58,9 @@ struct Prepared {
 
 /// Clears a video's place by its coverage, colour and alpha alike: the window's pixels there go
 /// transparent and the clip's own layer underneath shows (`video::windows::layer`).
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 const PUNCH: wgpu::BlendState = wgpu::BlendState { color: CLEAR, alpha: CLEAR };
-#[cfg(target_os = "windows")]
+#[cfg(any(target_os = "windows", target_os = "macos"))]
 const CLEAR: wgpu::BlendComponent = wgpu::BlendComponent { src_factor: wgpu::BlendFactor::Zero, dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha, operation: wgpu::BlendOperation::Add };
 
 // Metal has a small limit on live counter sample buffers. Keep one query set and lease
@@ -180,9 +180,9 @@ impl SurfaceRenderer {
             sender.send(Self::pipeline(&device_for, &layout_for, format, Blend::SourceOver)).ok();
             done();
             // A clip's layer (Windows) needs the punch; it compiles once the pictures can show.
-            #[cfg(target_os = "windows")]
+            #[cfg(any(target_os = "windows", target_os = "macos"))]
             punch_sender.send(Self::pipeline_with(&device_for, &layout_for, format, PUNCH)).ok();
-            #[cfg(not(target_os = "windows"))]
+            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
             drop(punch_sender);
         });
         let ok = spawned.is_ok();
@@ -378,7 +378,7 @@ impl SurfaceRenderer {
         self.importer.as_ref().map_or(0, |i| i.live_planes.load(std::sync::atomic::Ordering::SeqCst))
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     #[doc(hidden)]
     /// Punches these surfaces' places out of the window's pixels from the next `prepare` on,
     /// once the punch pipeline has compiled (`punch_ready`).
@@ -388,7 +388,7 @@ impl SurfaceRenderer {
 
     /// The punch pipeline has compiled. A renderer made without `build` starts compiling it here,
     /// on a thread of its own as `build` does.
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     #[doc(hidden)]
     pub fn punch_ready(&mut self) -> bool {
         if self.punch.is_some() {

@@ -374,14 +374,15 @@ impl Renderer {
     }
 
     /// Punches these native surfaces' places out of the window's pixels from the next
-    /// `prepare_surfaces` on, for clips shown on their own layer underneath (Windows).
-    #[cfg(target_os = "windows")]
+    /// `prepare_surfaces` on, for clips shown on their own layer underneath (Windows) and
+    /// native views the app keeps under the window (macOS).
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     pub(crate) fn set_punched_surfaces(&mut self, keys: Vec<usize>) {
         if let Some(s) = &mut self.surfaces { s.set_punched(keys); }
     }
 
     /// The punch pipeline has compiled (`set_punched_surfaces`).
-    #[cfg(target_os = "windows")]
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
     pub(crate) fn surface_punch_ready(&mut self) -> bool {
         self.surfaces.as_mut().is_some_and(crate::native_surface::SurfaceRenderer::punch_ready)
     }
