@@ -239,6 +239,21 @@ impl RuntimeCore {
         self.frame.queue.push(Action::Focus(path, x, y));
     }
 
+    /// What (x, y) is over for a field's [`El::on_input_drag`](crate::El::on_input_drag).
+    fn drag_over(&self, x: f32, y: f32) -> crate::DragOver {
+        let Some(t) = self.top_hit(x, y) else { return crate::DragOver::default() };
+        let up = |from: usize| std::iter::successors(Some(from), |&p| self.tree.nodes[p].parent);
+        let field = self.textbox_input(t).or_else(|| up(t).find(|&p| self.tree.nodes[p].input.is_some()));
+        let key = up(field.unwrap_or(t)).find_map(|p| self.tree.nodes[p].key.clone());
+        let byte = field.and_then(|j| {
+            let n = &self.tree.nodes[j];
+            let (inp, laid) = (n.input.as_ref()?, n.text_layout.as_ref()?);
+            let [tx, ty] = self.input_text_point(j, x, y)?;
+            Some(hit(&inp.edit, laid.view(), tx, ty, self.env.scale, inp.single_line).caret)
+        });
+        crate::DragOver { key, byte }
+    }
+
     pub(in crate::runtime) fn focus_input(&mut self, app: &mut dyn AppDriver, path: String, x: f32, y: f32, one: &mut Tx) -> bool {
         let step = if self.edit.input_click.steps.front().is_some_and(|(p, _)| *p == path) {
             self.edit.input_click.steps.pop_front().unwrap().1
@@ -338,10 +353,14 @@ impl RuntimeCore {
                 let (anchor, focus) = extend(self.edit.input_click.origin, at);
                 let before = (e.anchor, e.focus);
                 e.set_selection(anchor, focus);
-                if (e.anchor, e.focus) == before {
+                let moved = (e.anchor, e.focus) != before;
+                if moved {
+                    e.break_history_group();
+                }
+                let heard = self.tree.nodes[i].input.as_ref().and_then(|inp| inp.drag.clone()).map(|f| f(app.states(), self.drag_over(x, y), one));
+                if !moved && heard.is_none() {
                     return false;
                 }
-                e.break_history_group();
                 one.commit = one.commit.instant();
                 true
             }

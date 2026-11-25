@@ -92,6 +92,7 @@ pub use el::Anchor;
 pub use el::CaretRow;
 pub use el::Cursor;
 pub use el::CursorImage;
+pub use el::DragOver;
 pub use el::Cycle;
 pub use el::Direction;
 pub use el::Drag;

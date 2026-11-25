@@ -333,6 +333,7 @@ pub(super) fn retire_removed_nodes(
             let was_revealed = input.edit.masking() == crate::edit::Masking::Shown;
             input.access = None;
             input.key = None;
+            input.drag = None;
             input.change = None;
             input.edit.focused = false;
             input.edit.cancel_composition();

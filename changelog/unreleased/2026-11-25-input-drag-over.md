@@ -1,0 +1,1 @@
+- `El::on_input_drag` hears a selection drag that started in a text field as it moves, with a `DragOver` naming the keyed element under the pointer and, over a text field, the byte of its text there, so a document made of several fields can select across them. The field still selects its own text as before.

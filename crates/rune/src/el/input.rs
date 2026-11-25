@@ -41,8 +41,24 @@ pub struct InputSpec {
     pub(crate) selection_style: Option<SelectionStyle>,
     /// [`El::presence`]: other people's selections and carets in the same text.
     pub(crate) presence: Vec<Presence>,
+    /// [`El::on_input_drag`].
+    pub(crate) drag: Option<InputDragFn>,
     /// [`El::block_look`]: the field's document metrics.
     pub(crate) block_look: Option<crate::edit::BlockLook>,
+}
+
+pub(crate) type InputDragFn = Rc<dyn Fn(crate::states::States<'_>, DragOver, &mut Tx)>;
+
+/// What the pointer is over as a selection drag that started in a field moves
+/// ([`El::on_input_drag`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DragOver {
+    /// The key of the nearest keyed element around the topmost one under the pointer that
+    /// takes pointer input: the field's own while it is over the field, another field's, or a
+    /// pressable element between them.
+    pub key: Option<String>,
+    /// When the pointer is over a text field: the byte of that field's text it is at.
+    pub byte: Option<usize>,
 }
 
 /// Another person's place in a shared [`text_input`]: their selection from byte `start` to
@@ -131,6 +147,7 @@ pub fn text_input(edit: &TextEdit, style: TextStyle) -> El {
         spellcheck: false,
         selection_style: None,
         presence: Vec::new(),
+        drag: None,
         block_look: None,
     }));
     e.sync_input_pills();
@@ -274,6 +291,15 @@ impl El {
     pub fn on_input_paste<S: 'static>(mut self, f: impl Fn(&mut S, &crate::ClipboardContent, &mut Tx) -> bool + 'static) -> Self {
         if let Some(input) = self.cold.get_mut_if_some().and_then(|c| c.input.as_deref_mut()) {
             input.paste = Some(Rc::new(move |s, content, tx| f(downcast::<S>(s), content, tx)));
+        }
+        self
+    }
+    /// Hear a selection drag that started in this field as it moves, with what the pointer is
+    /// over ([`DragOver`]), so a document made of several fields can select across them. The
+    /// field still selects its own text up to the pointer as usual.
+    pub fn on_input_drag<S: 'static>(mut self, f: impl Fn(&mut S, DragOver, &mut Tx) + 'static) -> Self {
+        if let Some(input) = self.cold.get_mut_if_some().and_then(|c| c.input.as_deref_mut()) {
+            input.drag = Some(Rc::new(move |s, over, tx| f(downcast::<S>(s), over, tx)));
         }
         self
     }
