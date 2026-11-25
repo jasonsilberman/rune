@@ -376,7 +376,8 @@ impl SplitView {
             }
             if let Some(header) = self.side_header {
                 let header = header.padding(12.0).build(k);
-                p.content = card(k, "side-pane", Some(header), p.content).w_full().h_full().ml(self.frame).mr(self.frame).mb(self.frame);
+                let side = card(k, "side-pane", Some(header), p.content).grow(1.0).min_w(0.0);
+                p.content = row().key("side-pane-frame").w_full().h_full().pl(self.frame).pr(self.frame).pb(self.frame).child(side);
             }
             let content = Contents { pad: [0.0; 2], slide: false, peek: None, band: None, hold: None };
             below = below.child(dock(&d, "inspector-pane", p, false, content));
