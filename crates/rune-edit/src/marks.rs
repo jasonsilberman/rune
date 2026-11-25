@@ -427,10 +427,10 @@ impl TextEdit {
         self.active_block()
     }
 
-    /// Whether any paragraph in the current selection is a bullet or numbered list item.
+    /// Whether any paragraph in the current selection is a bullet, numbered or checklist item.
     pub fn selection_in_list(&self) -> bool {
         let (first, last) = self.selected_line_range();
-        (first..=last).any(|i| self.blocks.get(i).copied().unwrap_or(Block::Paragraph).is_list())
+        (first..=last).any(|i| self.blocks.get(i).copied().unwrap_or(Block::Paragraph).list_level().is_some())
     }
 
     /// Set the [`Block`] attribute for all paragraphs in the current selection, unless the field
@@ -463,10 +463,10 @@ impl TextEdit {
             return;
         }
         self.sync_invariants();
-        let Some(&Block::Check(done)) = self.blocks.get(line) else { return };
+        let Some(&Block::Check(done, level)) = self.blocks.get(line) else { return };
         self.break_history_group();
         let before = self.snapshot();
-        self.blocks[line] = Block::Check(!done);
+        self.blocks[line] = Block::Check(!done, level);
         self.record_change(before, EditKind::Other);
     }
 
@@ -485,8 +485,10 @@ impl TextEdit {
             (Block::Paragraph, "- " | "* ") => Block::Bullet(0),
             (Block::Paragraph, "1. ") => Block::Numbered(0),
             (Block::Paragraph, "> ") => Block::Quote,
-            (Block::Paragraph | Block::Bullet(_), "[] " | "[ ] ") | (Block::Paragraph, "- [ ] ") => Block::Check(false),
-            (Block::Paragraph | Block::Bullet(_), "[x] " | "[X] ") => Block::Check(true),
+            (Block::Paragraph, "[] " | "[ ] " | "- [ ] ") => Block::Check(false, 0),
+            (Block::Bullet(l), "[] " | "[ ] ") => Block::Check(false, l),
+            (Block::Paragraph, "[x] " | "[X] ") => Block::Check(true, 0),
+            (Block::Bullet(l), "[x] " | "[X] ") => Block::Check(true, l),
             _ => return,
         };
         if !self.allows_block(block) {
@@ -519,6 +521,7 @@ impl TextEdit {
                     *slot = match (slot.list_level(), block) {
                         (Some(lvl), Block::Bullet(0)) => Block::Bullet(lvl),
                         (Some(lvl), Block::Numbered(0)) => Block::Numbered(lvl),
+                        (Some(lvl), Block::Check(done, 0)) => Block::Check(done, lvl),
                         _ => block,
                     };
                 }

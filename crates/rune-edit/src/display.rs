@@ -155,7 +155,7 @@ impl TextEdit {
                         spans.push(Span { start, end, size: Some(h.size), weight: Some(h.weight), ..Span::default() });
                     }
                 }
-                Block::Check(true) => {
+                Block::Check(true, _) => {
                     strikes.push((start, end, style.marker));
                     spans.push(Span { start, end, color: style.marker, ..Span::default() });
                 }

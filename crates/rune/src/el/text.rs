@@ -300,7 +300,7 @@ impl El {
             let mut start = 0u32;
             for (line, words) in t.content.split('\n').enumerate() {
                 let end = start + words.len() as u32;
-                if blocks.get(line) == Some(&crate::edit::Block::Check(true)) && start < end {
+                if matches!(blocks.get(line), Some(crate::edit::Block::Check(true, _))) && start < end {
                     base_spans.push(Span { start, end, color: Some(t.color.alpha(t.color.a * 0.5)), ..Span::default() });
                 }
                 start = end + 1;

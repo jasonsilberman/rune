@@ -25,9 +25,9 @@ fn block_prefixes_and_a_space_become_blocks_only_where_shortcuts_are_on() {
         ("- ", Block::Bullet(0)),
         ("1. ", Block::Numbered(0)),
         ("> ", Block::Quote),
-        ("[] ", Block::Check(false)),
-        ("- [ ] ", Block::Check(false)),
-        ("[x] ", Block::Check(true)),
+        ("[] ", Block::Check(false, 0)),
+        ("- [ ] ", Block::Check(false, 0)),
+        ("[x] ", Block::Check(true, 0)),
     ] {
         let mut e = note("", vec![Block::Paragraph]);
         typed(&mut e, prefix);
@@ -42,11 +42,11 @@ fn block_prefixes_and_a_space_become_blocks_only_where_shortcuts_are_on() {
 
 #[test]
 fn return_continues_a_checklist_unchecked_ends_it_when_empty_and_leaves_a_heading_for_body() {
-    let mut e = note("Ship", vec![Block::Check(true)]);
+    let mut e = note("Ship", vec![Block::Check(true, 0)]);
     e.key(&k(Key::Enter), None);
-    assert_eq!(e.blocks(), &[Block::Check(true), Block::Check(false)]);
+    assert_eq!(e.blocks(), &[Block::Check(true, 0), Block::Check(false, 0)]);
     e.key(&k(Key::Enter), None);
-    assert_eq!(e.blocks(), &[Block::Check(true), Block::Paragraph]);
+    assert_eq!(e.blocks(), &[Block::Check(true, 0), Block::Paragraph]);
 
     let mut h = note("Title", vec![Block::Heading(1)]);
     h.key(&k(Key::Enter), None);
@@ -58,7 +58,7 @@ fn return_continues_a_checklist_unchecked_ends_it_when_empty_and_leaves_a_headin
 
 #[test]
 fn backspace_at_the_start_of_a_heading_or_item_makes_it_body_text() {
-    for block in [Block::Heading(2), Block::Check(true)] {
+    for block in [Block::Heading(2), Block::Check(true, 0)] {
         let mut e = note("a\nb", vec![Block::Paragraph, block]);
         e.set_caret(2);
         e.key(&k(Key::Backspace), None);
@@ -67,14 +67,31 @@ fn backspace_at_the_start_of_a_heading_or_item_makes_it_body_text() {
 }
 
 #[test]
+fn a_checklist_item_nests_like_a_list_item_and_keeps_its_level_and_state() {
+    let mut e = note("Ship\nNotes", vec![Block::Check(false, 0), Block::Check(true, 0)]);
+    e.set_caret(6);
+    e.key(&k(Key::Tab), None);
+    assert_eq!(e.blocks(), &[Block::Check(false, 0), Block::Check(true, 1)]);
+    e.key(&k(Key::End), None);
+    e.key(&k(Key::Enter), None);
+    assert_eq!(e.blocks()[2], Block::Check(false, 1));
+    e.toggle_check(1);
+    assert_eq!(e.blocks()[1], Block::Check(false, 1));
+    e.key(&k(Key::Backspace), None);
+    assert_eq!(e.blocks()[2], Block::Check(false, 0));
+    let m = BlockMetrics::new(15.0, None);
+    assert!(Block::Check(false, 1).indent_pt(m) > Block::Check(false, 0).indent_pt(m));
+}
+
+#[test]
 fn toggle_check_flips_one_item_as_an_undo_step_and_keeps_the_caret() {
-    let mut e = note("a\nb", vec![Block::Check(false), Block::Paragraph]);
+    let mut e = note("a\nb", vec![Block::Check(false, 0), Block::Paragraph]);
     e.set_caret(3);
     e.toggle_check(0);
     e.toggle_check(1);
-    assert_eq!((e.blocks(), e.range()), (&[Block::Check(true), Block::Paragraph][..], (3, 3)));
+    assert_eq!((e.blocks(), e.range()), (&[Block::Check(true, 0), Block::Paragraph][..], (3, 3)));
     e.undo();
-    assert_eq!(e.blocks()[0], Block::Check(false));
+    assert_eq!(e.blocks()[0], Block::Check(false, 0));
 }
 
 #[test]
@@ -114,10 +131,10 @@ fn a_look_collapses_gaps_aligns_list_text_and_leaves_other_fields_as_they_were()
     let m = BlockMetrics::new(15.0, Some(look()));
     assert_eq!(Block::Heading(2).gap_after(Block::Paragraph, m), 24.0);
     assert_eq!(Block::Paragraph.gap_after(Block::Heading(1), m), 8.0);
-    assert_eq!(Block::Check(false).gap_after(Block::Bullet(0), m), 2.0);
-    assert_eq!(Block::Paragraph.gap_after(Block::Check(true), m), 6.0);
+    assert_eq!(Block::Check(false, 0).gap_after(Block::Bullet(0), m), 2.0);
+    assert_eq!(Block::Paragraph.gap_after(Block::Check(true, 0), m), 6.0);
     assert_eq!(Block::Quote.gap_after(Block::Quote, m), 0.0);
-    for b in [Block::Bullet(0), Block::Numbered(0), Block::Check(false)] {
+    for b in [Block::Bullet(0), Block::Numbered(0), Block::Check(false, 0)] {
         assert_eq!(b.indent_pt(m), 28.0, "{b:?}");
     }
     assert_eq!(Block::Bullet(2).indent_pt(m), 76.0);

@@ -1,6 +1,7 @@
 //! Paragraph-level block attributes for `\n`-delimited lines.
 
-/// Maximum nesting level (`0..=MAX_LIST_LEVEL`) for [`Block::Bullet`] and [`Block::Numbered`].
+/// Maximum nesting level (`0..=MAX_LIST_LEVEL`) for [`Block::Bullet`], [`Block::Numbered`] and
+/// [`Block::Check`].
 pub const MAX_LIST_LEVEL: u8 = 3;
 
 /// Paragraph-level block attribute for a `\n`-delimited line.
@@ -19,9 +20,9 @@ pub enum Block {
     /// Heading line at level `1..=MAX_HEADING_LEVEL` (title, heading, subheading), drawn
     /// larger and bolder than the body.
     Heading(u8),
-    /// Checklist item with a checkbox before it; `true` when checked, which dims and strikes
-    /// its text.
-    Check(bool),
+    /// Checklist item with a checkbox before it at nesting level `0..=MAX_LIST_LEVEL`; `true`
+    /// when checked, which dims and strikes its text.
+    Check(bool, u8),
 }
 
 /// Deepest [`Block::Heading`] level.
@@ -34,7 +35,7 @@ impl Block {
 
     pub fn list_level(self) -> Option<u8> {
         match self {
-            Block::Bullet(l) | Block::Numbered(l) => Some(l),
+            Block::Bullet(l) | Block::Numbered(l) | Block::Check(_, l) => Some(l),
             _ => None,
         }
     }
@@ -44,6 +45,7 @@ impl Block {
         match self {
             Block::Bullet(_) => Block::Bullet(l),
             Block::Numbered(_) => Block::Numbered(l),
+            Block::Check(done, _) => Block::Check(done, l),
             other => other,
         }
     }
@@ -58,7 +60,7 @@ impl Block {
                 | (Block::Quote, Block::Quote)
                 | (Block::Code, Block::Code)
                 | (Block::Heading(_), Block::Heading(_))
-                | (Block::Check(_), Block::Check(_))
+                | (Block::Check(..), Block::Check(..))
         )
     }
 
@@ -72,7 +74,7 @@ impl Block {
             Block::Quote => 3,
             Block::Code => 4,
             Block::Heading(_) => 5,
-            Block::Check(_) => 6,
+            Block::Check(..) => 6,
         }
     }
 
@@ -102,7 +104,7 @@ impl Block {
         let Some(look) = m.look else {
             return self.heading_look(m).map_or(0.0, |h| h.before);
         };
-        let listed = |b: Block| matches!(b, Block::Bullet(_) | Block::Numbered(_) | Block::Check(_));
+        let listed = |b: Block| matches!(b, Block::Bullet(_) | Block::Numbered(_) | Block::Check(..));
         if listed(prev) && listed(self) {
             return look.list_gap;
         }
@@ -120,8 +122,7 @@ impl Block {
         if let Some(look) = m.look {
             return match self {
                 Block::Paragraph | Block::Heading(_) => 0.0,
-                Block::Bullet(l) | Block::Numbered(l) => look.list_indent + look.level_indent * f32::from(l.min(MAX_LIST_LEVEL)),
-                Block::Check(_) => look.list_indent,
+                Block::Bullet(l) | Block::Numbered(l) | Block::Check(_, l) => look.list_indent + look.level_indent * f32::from(l.min(MAX_LIST_LEVEL)),
                 Block::Quote => look.quote_indent,
                 Block::Code => (m.size * 0.75).round().max(10.0),
             };
@@ -134,7 +135,7 @@ impl Block {
             Block::Quote => (font_size * 1.1).round().max(14.0),
             Block::Code => (font_size * 0.75).round().max(10.0),
             Block::Heading(_) => 0.0,
-            Block::Check(_) => (font_size * 1.9).round().max(26.0),
+            Block::Check(_, l) => (font_size * 1.9).round().max(26.0) + unit * l.min(MAX_LIST_LEVEL) as f32,
         }
     }
 

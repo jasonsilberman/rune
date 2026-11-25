@@ -111,7 +111,7 @@ pub(in crate::runtime) fn emit_block_decorations(
                         markers.push((indent, baseline, blk, list_counts[l]));
                     }
                 }
-                Block::Check(_) => {
+                Block::Check(..) => {
                     if !is_soft {
                         list_counts = [0; (MAX_LIST_LEVEL as usize) + 1];
                         let indent = (blk.indent_pt(metrics) * s).round();
@@ -151,7 +151,7 @@ pub(in crate::runtime) fn emit_block_decorations(
                 let indent = (blk.indent_pt(metrics) * s).round();
                 markers.push((indent, baseline, blk, 1));
             }
-            Block::Check(_) => {
+            Block::Check(..) => {
                 let indent = (blk.indent_pt(metrics) * s).round();
                 markers.push((indent, baseline, blk, 0));
             }
@@ -197,7 +197,7 @@ pub(in crate::runtime) fn emit_block_decorations(
                         );
                     }
                 }
-                Block::Check(done) => {
+                Block::Check(done, _) => {
                     let [x, y, d] = check_box(metrics, s, tk, origin[0], indent_px, baseline_y);
                     let (x, y) = (x + glide[0], y + glide[1]);
                     let ring = (1.25 * s * tk).max(1.0);

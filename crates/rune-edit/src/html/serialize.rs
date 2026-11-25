@@ -130,7 +130,7 @@ pub(crate) fn serialize_html(edit: &TextEdit, range: Range<usize>) -> String {
                 out.push_str(&tag);
                 out.push('>');
             }
-            Block::Check(done) => {
+            Block::Check(done, _) => {
                 out.push_str("<ul");
                 out.push_str(dirs[idx]);
                 out.push_str("><li><input type=\"checkbox\" disabled");

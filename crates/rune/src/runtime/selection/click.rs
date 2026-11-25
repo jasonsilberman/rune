@@ -284,7 +284,7 @@ impl RuntimeCore {
                 if let (Some(l), Some([tx, ty])) = (layout, point) {
                     let h = hit(e, l.view(), tx, ty, s, single);
                     let line = e.line_of_byte(h.caret);
-                    if clicks == 1 && !shift && let Some(&gutter @ crate::edit::Block::Check(_)) = e.blocks().get(line)
+                    if clicks == 1 && !shift && let Some(&gutter @ crate::edit::Block::Check(..)) = e.blocks().get(line)
                         && (0.0..gutter.indent_pt(metrics)).contains(&tx)
                     {
                         e.toggle_check(line);
