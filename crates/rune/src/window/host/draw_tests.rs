@@ -108,8 +108,6 @@ impl MockWindowFrame {
             presented,
             backoff: Backoff::default(),
             surface_ok: true,
-            #[cfg(target_os = "macos")]
-            layered: None,
             renderer_srgb: true,
             reblend_succeeds: false,
             now,
