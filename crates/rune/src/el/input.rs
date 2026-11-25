@@ -47,17 +47,26 @@ pub struct InputSpec {
 
 /// Another person's place in a shared [`text_input`]: their selection from byte `start` to
 /// `end` of `edit.text`, caret at `end`, in their `color` ([`El::presence`]).
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Presence {
     pub(crate) start: usize,
     pub(crate) end: usize,
     pub(crate) color: Color,
+    pub(crate) label: Option<String>,
 }
 
 impl Presence {
     /// Someone's selection `start..end` (bytes of `edit.text`; equal for a bare caret) in `color`.
     pub fn new(start: usize, end: usize, color: Color) -> Presence {
-        Presence { start, end, color }
+        Presence { start, end, color, label: None }
+    }
+
+    /// Their name on a small tag of their colour standing on their caret, as a collaborative
+    /// editor names a caret that just moved. Show it while it means something and drop it
+    /// after: the tag draws for as long as the field is given it.
+    pub fn label(mut self, label: impl Into<String>) -> Presence {
+        self.label = Some(label.into()).filter(|l| !l.is_empty());
+        self
     }
 }
 

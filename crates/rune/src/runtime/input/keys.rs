@@ -29,10 +29,11 @@ impl RuntimeCore {
         if self.focused_input().is_some() {
             self.edit.input_click.clear_last();
         }
-        if let Some(f) = self.focused_input().and_then(|input| input.key.clone())
-            && Tx::took(f(app.states(), ev, one), one)
-        {
-            return true;
+        if let Some(f) = self.focused_input().and_then(|input| input.key.clone()) {
+            if matches!(ev.key, crate::Key::Up | crate::Key::Down) { one.caret_row = self.caret_row(); }
+            let took = Tx::took(f(app.states(), ev, one), one);
+            one.caret_row = None;
+            if took { return true; }
         }
         one.physical_key = None;
         // Inside a list item or code block, Tab (and Shift+Tab in lists) edits the document by default.
@@ -184,6 +185,19 @@ impl RuntimeCore {
         st.moved();
         st.land(stick);
         true
+    }
+
+    /// The focused field's [`CaretRow`](crate::CaretRow) in the layout it drew.
+    fn caret_row(&mut self) -> Option<crate::CaretRow> {
+        let layout = self.focused_layout()?;
+        let e = &self.focused_input()?.edit;
+        let (shown, flow) = (e.display().0, layout.view());
+        let top = |at: usize, side| flow.caret(at.min(shown.len()), side, 0.0).y0;
+        let here = top(crate::runtime::commit::text_layout::caret_index(e, &shown), e.affinity);
+        Some(crate::CaretRow {
+            first: (here - top(0, parley::Affinity::Downstream)).abs() < 0.5,
+            last: (here - top(shown.len(), parley::Affinity::Upstream)).abs() < 0.5,
+        })
     }
 
     pub(in crate::runtime) fn focused_layout(&mut self) -> Option<TextLayout> {

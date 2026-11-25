@@ -64,7 +64,7 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
     let owns = at("owns");
     let presence = [
         Presence::new(release, release + "release".len(), rune::oklch(0.66, 0.2, 0.0)),
-        Presence::new(owns, owns, rune::oklch(0.68, 0.16, 150.0)),
+        Presence::new(owns, owns, rune::oklch(0.68, 0.16, 150.0)).label("Sam"),
     ];
     col().w_full().h_full().fill(k.c.page).padding(28.0).child(
         text_input(&s.edit, TextStyle { size: 15.0, line_height: 24.0, ..type_::BODY })

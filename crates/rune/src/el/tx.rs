@@ -7,6 +7,7 @@ use rune_motion::{Anim, Spring};
 use crate::el::*;
 
 mod keys;
+pub use keys::CaretRow;
 mod press;
 mod scroll;
 
@@ -28,6 +29,8 @@ pub struct Tx {
     pub(crate) input_waiting: bool,
     pub(crate) physical_key: Option<crate::PhysicalKeyCode>,
     pub(crate) key_base: Option<char>,
+    /// `Tx::caret_row`.
+    pub(crate) caret_row: Option<keys::CaretRow>,
     pub(crate) focused: Option<String>,
     /// What this change does with motion ([`Tx::instant`], [`Tx::animated`], [`Tx::settle`]).
     pub(crate) commit: Commit,

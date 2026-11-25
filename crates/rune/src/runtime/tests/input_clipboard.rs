@@ -503,3 +503,31 @@ fn clipboard_requests_follow_handler_order_and_are_consumed_once() {
     rt.frame(1.0 / 120.0);
     assert_eq!(rt.copy_request.take().as_deref(), Some("response"));
 }
+
+/// Up and Down reach a field's key handler with where its caret sits among the lines the field
+/// draws: a wrapped paragraph's middle line is neither its first nor its last.
+#[test]
+fn up_and_down_tell_a_field_key_handler_whether_the_caret_is_on_a_drawn_edge_line() {
+    struct State { edit: crate::TextEdit, rows: Vec<Option<crate::CaretRow>> }
+    fn view(s: &State, _: &mut Cx<State>) -> El {
+        crate::text_input(&s.edit, crate::TextStyle::new(14.0, 400.0)).key("field").w(80.0)
+            .on_edit(|s: &mut State| &mut s.edit)
+            .label("Field")
+            .on_input_key(|s: &mut State, _, tx| { s.rows.push(tx.caret_row()); true })
+    }
+    let mut edit = crate::TextEdit::new("one two three four five six seven eight nine ten eleven twelve");
+    edit.focused = true;
+    let mut rt = Runtime::new(State { edit, rows: Vec::new() }, view, (200.0, 400.0), Env::new(true, 1.0));
+    rt.frame(0.0);
+    let len = rt.state.edit.text.len();
+    let mid = rt.state.edit.text.find("seven").unwrap();
+    for (at, key) in [(0, crate::Key::Up), (mid, crate::Key::Down), (len, crate::Key::Down), (mid, crate::Key::Left)] {
+        rt.state.edit.set_caret(at);
+        rt.invalidate();
+        rt.frame(0.1);
+        rt.key(KeyEvent { key, mods: Default::default() });
+        rt.frame(0.2);
+    }
+    let row = |first, last| Some(crate::CaretRow { first, last });
+    assert_eq!(rt.state.rows, [row(true, false), row(false, false), row(false, true), None]);
+}

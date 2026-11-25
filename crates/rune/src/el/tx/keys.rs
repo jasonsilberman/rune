@@ -3,6 +3,16 @@
 
 use crate::Tx;
 
+/// Where a text field's caret sits among the lines the field draws, wrapped lines counted
+/// ([`Tx::caret_row`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CaretRow {
+    /// No drawn line above the caret's.
+    pub first: bool,
+    /// No drawn line below the caret's.
+    pub last: bool,
+}
+
 impl Tx {
     /// Whether the key a key handler is seeing is the OS auto-repeat of a held key: true for
     /// each repeat, false for the first press and outside key handlers. One-shot actions
@@ -28,6 +38,12 @@ impl Tx {
     /// for a key with no physical origin (`Runtime::key`, a script's `"key"` without a
     /// `"code"`) and outside key handlers.
     pub fn key_base(&self) -> Option<char> { self.key_base }
+
+    /// In a focused text field's [`El::on_input_key`](crate::El::on_input_key) seeing Up or
+    /// Down: whether the caret is on the first and on the last line the field draws, wrapped
+    /// lines counted, so an editor made of several fields moves to the next one only from its
+    /// edge line, as a document's caret does. `None` for other keys and outside that handler.
+    pub fn caret_row(&self) -> Option<CaretRow> { self.caret_row }
 
     /// The modifier keys held as this handler runs, so a click can tell Shift-click (extend a
     /// list's selection) and Cmd-click (toggle a row) from a plain one. A key handler reads

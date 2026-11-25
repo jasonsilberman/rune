@@ -80,7 +80,7 @@ pub(crate) use sticky::{Sticky, StickyEdge};
 pub(crate) use text_spec::{Elide, TextDir, TextDirEvent, step_text_dir, wipe_links, wipe_string};
 pub use text_spec::TextSpec;
 pub(crate) use tx::{Commit, FocusAsk, MotionSource, SelectRequest, TraceCalls};
-pub use tx::{Shell, Tx};
+pub use tx::{CaretRow, Shell, Tx};
 pub(crate) use visual::VisualFlags;
 pub use visual::{Visual, VisualCold};
 pub(crate) use visuals::{GradientGeometry, RadialGradient};
