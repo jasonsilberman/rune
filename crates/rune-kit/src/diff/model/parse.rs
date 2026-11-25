@@ -197,7 +197,7 @@ fn strip_prefix(p: &str) -> String {
 }
 
 /// The path of a `---` or `+++` line: `None` for `/dev/null`, without a trailing timestamp.
-fn path_of(s: &str) -> Option<String> {
+pub(super) fn path_of(s: &str) -> Option<String> {
     let s = if s.starts_with('"') { s } else { s.split('\t').next().unwrap_or(s) };
     let s = s.trim_end();
     if s == "/dev/null" {
@@ -206,7 +206,7 @@ fn path_of(s: &str) -> Option<String> {
     Some(strip_prefix(s))
 }
 
-fn hunk_header(l: &str) -> Option<Hunk> {
+pub(super) fn hunk_header(l: &str) -> Option<Hunk> {
     let rest = l.strip_prefix("@@ -")?;
     let (ranges, section) = rest.split_once(" @@")?;
     let (old, new) = ranges.split_once(" +")?;

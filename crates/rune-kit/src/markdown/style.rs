@@ -39,6 +39,7 @@ pub struct MarkdownStyle {
     pub(super) inline_code_weight: f32,
     pub(super) inline_code_pad: f32,
     pub(super) code_block_pad: [f32; 2],
+    pub(super) code_block_radius: f32,
     pub(super) list_indent: f32,
     pub(super) list_gap: f32,
     pub(super) strong_weight: f32,
@@ -195,6 +196,7 @@ impl MarkdownStyle {
             inline_code_weight: 400.0,
             inline_code_pad: 3.5,
             code_block_pad: [12.0, 12.0],
+            code_block_radius: 6.0,
             list_indent: 32.0,
             list_gap: 4.0,
             strong_weight: 670.0,
@@ -306,6 +308,11 @@ impl MarkdownStyle {
     /// Room (x, y) inside a code block's frame; 12 by 12 by default.
     pub fn code_block_padding(mut self, x: f32, y: f32) -> Self {
         self.code_block_pad = [x, y];
+        self
+    }
+    /// The corner radius of a code block's and a diff fence's frame; 6 by default.
+    pub fn code_block_radius(mut self, radius: f32) -> Self {
+        self.code_block_radius = radius;
         self
     }
     /// The column a list's markers sit centred in (32 by default), and the gap between its
@@ -605,6 +612,7 @@ impl std::hash::Hash for MarkdownStyle {
             inline_code_weight,
             inline_code_pad,
             code_block_pad,
+            code_block_radius,
             list_indent,
             list_gap,
             strong_weight,
@@ -651,7 +659,7 @@ impl std::hash::Hash for MarkdownStyle {
         (text, muted, accent, link_underline, code_bg, code_block_fill, code_block_border, quote_rule, rule).hash(state);
         (body, headings, code_block, (code_text, plain_code_text), shell, link_hover, list_outside, list_nested.map(|n| n.map(f32_bits)), table_align).hash(state);
         (f32_bits(quote.width), f32_bits(quote.pad), quote.text).hash(state);
-        [inline_code_scale, inline_code_weight, inline_code_pad, code_block_pad[0], code_block_pad[1], list_indent, list_gap, strong_weight, table_min_column]
+        [inline_code_scale, inline_code_weight, inline_code_pad, code_block_pad[0], code_block_pad[1], code_block_radius, list_indent, list_gap, strong_weight, table_min_column]
             .map(f32_bits)
             .hash(state);
         (table_outline, table_rule, table_head_fill, table_head_text, table_head_rule, table_head_weight.map(f32_bits), table_tabular, table_font).hash(state);

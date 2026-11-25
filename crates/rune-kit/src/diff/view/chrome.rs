@@ -33,7 +33,7 @@ impl View {
         let file = &st.files()[f];
         let hidden = st.hidden(f, gap).unwrap_or(0);
         let last = gap == file.hunks.len();
-        let expandable = file.expandable();
+        let expandable = file.expandable() && self.bind.expands();
         let mut buttons = Vec::new();
         if expandable {
             let mut add = |how: Expand, glyph: &'static Icon, label: String| {
@@ -76,11 +76,12 @@ impl View {
             };
             inner = inner.child(count);
         }
-        if let Some(h) = file.hunks.get(gap) {
-            inner = inner.child(text(h.header()).font(l.small).color(l.faint).single_line().key("header"));
+        if let Some(h) = file.hunks.get(gap).filter(|_| self.headers) {
+            inner = inner.child(text(self.header(h)).font(l.small).color(l.faint).single_line().key("header"));
         }
         let label = match file.hunks.get(gap) {
-            Some(h) => format!("{hidden} unchanged lines, then {}", h.header()),
+            Some(h) if self.headers => format!("{hidden} unchanged lines, then {}", self.header(h)),
+            Some(_) => format!("{hidden} unchanged lines"),
             None => format!("{hidden} unchanged lines"),
         };
         row().w_full().h(GAP_H).items_center().fill(l.gap_bg).role("group").label(label).child(inner)
@@ -150,10 +151,10 @@ impl View {
         }
         inner = inner.child(row().key("space").grow(1.0).a11y_hidden());
         let (adds, dels) = (file.additions(), file.deletions());
-        if adds > 0 {
+        if adds > 0 && self.totals {
             inner = inner.child(text(format!("+{adds}")).font(l.small).color(l.add.count).key("adds"));
         }
-        if dels > 0 {
+        if dels > 0 && self.totals {
             inner = inner.child(text(format!("−{dels}")).font(l.small).color(l.del.count).key("dels"));
         }
         if let Some(actions) = self.bind.header_action(s, f) {
@@ -163,7 +164,9 @@ impl View {
         if let (FileStatus::Renamed, Some(a)) = (file.status, old) {
             label.push_str(&format!(", renamed from {a}"));
         }
-        label.push_str(&format!(", {adds} added, {dels} removed"));
+        if self.totals {
+            label.push_str(&format!(", {adds} added, {dels} removed"));
+        }
         let line = |key: &'static str, c: Color| col().key(key).w_full().h(1.0).fill(c).a11y_hidden();
         let mut h = col().w_full().h(HEADER_H).fill(l.header_bg).role("heading").label(label);
         // In the list, as wide as the view and held to its left edge while the code scrolls

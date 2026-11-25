@@ -168,9 +168,11 @@ type TaskWire = Rc<dyn Fn(El, Rc<str>, usize, bool) -> El>;
 type FrameWire = Rc<dyn Fn(El, &DiagramFrame<'_>) -> El>;
 type CodeFrameFn = Rc<dyn Fn(El, &CodeFrame<'_>) -> El>;
 type CodeWrapFn = Rc<dyn Fn(usize, &str) -> bool>;
+type DiffBlockFn = Rc<dyn Fn(&DiffBlock<'_>) -> El>;
 pub(super) struct CodeWire {
     pub(super) frame: Option<CodeFrameFn>,
     pub(super) wrap: Option<CodeWrapFn>,
+    pub(super) diff: Option<DiffBlockFn>,
     pub(super) wrap_default: bool,
 }
 type QuoteWire = Rc<dyn Fn(El, &QuoteFrame<'_>) -> El>;
@@ -220,6 +222,13 @@ impl CodeFrame<'_> {
     }
 }
 
+/// A ```` ```diff ```` fence [`Markdown::diff_block`] draws.
+#[non_exhaustive]
+pub struct DiffBlock<'a> {
+    /// The fence's lines: a patch, hunks under `@@` headers, or lines marked `+`, `-` and ` `.
+    pub source: &'a str,
+}
+
 /// A diagram [`Markdown::diagram_frame`] is wrapping.
 #[cfg(feature = "mermaid")]
 #[non_exhaustive]
@@ -261,6 +270,7 @@ pub struct Markdown {
     diagram_frame: Option<FrameWire>,
     code_frame: Option<CodeFrameFn>,
     code_wrap: Option<CodeWrapFn>,
+    diff_block: Option<DiffBlockFn>,
     quote_frame: Option<QuoteWire>,
     link_favicon: Option<link_icon::FaviconWire>,
     images: Option<image::ImageWire>,
@@ -277,7 +287,7 @@ impl Markdown {
         Markdown { src: src.into(), style: None, block_keys: Vec::new(), highlights: Vec::new(), autolink: true, reveal: -1.0, streaming: false, on_link: None, on_link_secondary: None, link_look: None, link_help: None, link_ring: None, code_link: None,
             on_task: None, tasks_read_only: false, selectable: false, copy_source: false, scroll_wide: false, wrap_code: false, tentative: None, highlighter: Highlighter::builtin(),
             #[cfg(feature = "mermaid")]
-            diagram_frame: None, code_frame: None, code_wrap: None, quote_frame: None, link_favicon: None, images: None, on_image: None }
+            diagram_frame: None, code_frame: None, code_wrap: None, diff_block: None, quote_frame: None, link_favicon: None, images: None, on_image: None }
     }
     /// Highlight UTF-8 byte ranges of the Markdown source string (see [`find`]).
     ///
@@ -457,6 +467,18 @@ impl Markdown {
         self
     }
 
+    /// Draws `f(block)` in place of each ```` ```diff ```` fence instead of its tinted lines, so
+    /// an app can draw it as a diff view ([`crate::diff::InlineDiff`] over
+    /// [`crate::diff::parse_fragment`]) with its own controls.
+    ///
+    /// ```ignore
+    /// Markdown::new(src).diff_block(|d| InlineDiff::new(&DiffState::new(diff::parse_fragment(d.source))).build(&kit))
+    /// ```
+    pub fn diff_block(mut self, f: impl Fn(&DiffBlock<'_>) -> El + 'static) -> Self {
+        self.diff_block = Some(Rc::new(f));
+        self
+    }
+
     /// Draws `f(quote, frame)` in place of each block quote, so an app can put its own controls
     /// on it (a button that copies the whole quote). Quotes inside a quote come here too.
     ///
@@ -513,6 +535,7 @@ impl Markdown {
             && self.highlighter.is_builtin()
             && self.code_frame.is_none()
             && self.code_wrap.is_none()
+            && self.diff_block.is_none()
             && self.quote_frame.is_none()
             && self.link_favicon.is_none()
             && self.images.is_none()
@@ -556,8 +579,8 @@ impl Markdown {
         };
         let dirs = bidi::Dirs::new(&blocks);
         let root_dir = dirs.of_slice(&blocks).or(self.tentative);
-        let code_frame = (self.code_frame.is_some() || self.code_wrap.is_some() || self.wrap_code)
-            .then(|| CodeWire { frame: self.code_frame, wrap: self.code_wrap, wrap_default: self.wrap_code });
+        let code_frame = (self.code_frame.is_some() || self.code_wrap.is_some() || self.diff_block.is_some() || self.wrap_code)
+            .then(|| CodeWire { frame: self.code_frame, wrap: self.code_wrap, diff: self.diff_block, wrap_default: self.wrap_code });
         let r = Renderer { s: style.clone(), highlights: self.highlights, reveal: self.reveal, streaming: self.streaming, on_link: self.on_link, on_link_secondary: self.on_link_secondary, link_look: self.link_look, link_help: self.link_help, link_ring: self.link_ring, code_link: self.code_link,
             on_task: self.on_task, tasks_read_only: self.tasks_read_only, selectable: self.selectable, scroll_wide: self.scroll_wide, tentative: self.tentative,
             highlighter: self.highlighter, sources, next_source: Cell::new(0), tasks, next_task: Cell::new(0),

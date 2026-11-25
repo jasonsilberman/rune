@@ -12,12 +12,15 @@ use rune::{Color, Cursor, Drag, El, GrowthSpec, Icon, Phase, ScrollSpec, Tx, col
 use super::model::{LineKind, Side};
 use super::state::{Annotation, DiffMode, DiffState, Expand, LINE_H, LineRange, LineRef, Row};
 use crate::Kit;
+use crate::syntax::SyntaxTheme;
 
 mod chrome;
+mod inline;
 mod line_info;
 mod look;
 mod spans;
 
+pub use inline::{INLINE_ROWS, InlineDiff};
 pub use line_info::FoldRow;
 
 use look::Look;
@@ -52,6 +55,7 @@ struct GutterDrag {
 }
 
 trait DiffBind {
+    fn expands(&self) -> bool;
     fn has_comment(&self) -> bool;
     fn has_annotation(&self) -> bool;
     fn header_action(&self, s: &dyn Any, f: usize) -> Option<El>;
@@ -76,6 +80,7 @@ struct DiffHandlers<S> {
 }
 
 impl<S: 'static> DiffBind for DiffHandlers<S> {
+    fn expands(&self) -> bool { true }
     fn has_comment(&self) -> bool { self.on_comment.is_some() }
     fn has_annotation(&self) -> bool { self.annotation.is_some() }
 
@@ -104,7 +109,7 @@ impl<S: 'static> DiffBind for DiffHandlers<S> {
 
     fn bind_number_drag(&self, el: El, drag: GutterDrag) -> El {
         let (get, on_select) = (self.get_mut.clone(), self.on_select.clone());
-        el.on_drag(move |s: &mut S, d: &mut Drag, tx| {
+        el.cursor(Cursor::Pointer).on_drag(move |s: &mut S, d: &mut Drag, tx| {
             if let Some(sel) = number_drag(get(s), d, tx, drag)
                 && let Some(cb) = &on_select
             {
@@ -163,6 +168,9 @@ impl<S: 'static> DiffBind for DiffHandlers<S> {
 pub struct DiffView<S> {
     key: String,
     fold_row: FoldRow,
+    syntax: Option<SyntaxTheme>,
+    first: [u32; 2],
+    totals: bool,
     handlers: DiffHandlers<S>,
 }
 
@@ -171,6 +179,9 @@ impl<S: 'static> DiffView<S> {
         DiffView {
             key: "diff".into(),
             fold_row: FoldRow::default(),
+            syntax: None,
+            first: [1, 1],
+            totals: true,
             handlers: DiffHandlers { get: Rc::new(get), get_mut: Rc::new(get_mut), annotation: None, header: None, on_select: None, on_comment: None, on_visible_file: None },
         }
     }
@@ -181,6 +192,17 @@ impl<S: 'static> DiffView<S> {
     /// How folded unchanged lines draw: [`FoldRow::Summary`] by default, or Pierre's
     /// [`FoldRow::LineInfo`] as OpenCode Desktop's review has them.
     pub fn fold_row(mut self, fold_row: FoldRow) -> Self { self.fold_row = fold_row; self }
+
+    /// Colour code with `theme` instead of [`SyntaxTheme::from_kit`].
+    pub fn syntax(mut self, theme: SyntaxTheme) -> Self { self.syntax = Some(theme); self }
+
+    /// Number the old side's lines from `old` and the new side's from `new` (both 1 by
+    /// default), for a diff of two excerpts of a file: line numbers and hunk headers show
+    /// where in the file each line is.
+    pub fn first_lines(mut self, old: u32, new: u32) -> Self { self.first = [old.max(1), new.max(1)]; self }
+
+    /// Show each file's added and removed line counts in its header (on by default).
+    pub fn totals(mut self, on: bool) -> Self { self.totals = on; self }
 
     /// Build each [`Annotation`] under its line. Rows holding annotations are built every
     /// commit, so a widget can read app state (a composer's text) freely.
@@ -202,7 +224,8 @@ impl<S: 'static> DiffView<S> {
 
     pub fn build(self, s: &S, k: &Kit) -> El {
         let st = (self.handlers.get)(s);
-        let view = Rc::new(View { look: Look::new(k), fold_row: self.fold_row, bind: Box::new(self.handlers) });
+        let look = Look::new(k, k.c.bg_base, self.syntax.unwrap_or_else(|| SyntaxTheme::from_kit(k)));
+        let view = Rc::new(View { look, fold_row: self.fold_row, numbers: true, first: self.first, headers: true, totals: self.totals, marks: Vec::new(), bind: Box::new(self.handlers) });
         view.build_root(st, self.key, s)
     }
 }
@@ -248,6 +271,11 @@ impl Cell<'_> {
 struct View {
     look: Look,
     fold_row: FoldRow,
+    numbers: bool,
+    first: [u32; 2],
+    headers: bool,
+    totals: bool,
+    marks: Vec<std::ops::RangeInclusive<u32>>,
     bind: Box<dyn DiffBind>,
 }
 
@@ -277,8 +305,9 @@ impl View {
     /// How wide unwrapped (unified) content is, so the list doesn't change width as rows are built.
     fn content_width(&self, st: &DiffState) -> f32 {
         let l = &self.look;
-        let digits = (0..st.files().len()).map(|f| st.digits(f)).max().unwrap_or(3);
-        BAR + 2.0 * l.number_w(digits) + st.columns() as f32 * l.adv + CODE_PAD.0 + CODE_PAD.1
+        let digits = (0..st.files().len()).map(|f| self.digits(st, f)).max().unwrap_or(3);
+        let numbers = if self.numbers { 2.0 * l.number_w(digits) } else { 0.0 };
+        BAR + numbers + st.columns() as f32 * l.adv + CODE_PAD.0 + CODE_PAD.1
     }
 
     /// The most a full-width part of a row (a header, an annotation) spans: the viewport, not
@@ -398,10 +427,10 @@ impl View {
 
     fn unified(&self, st: &DiffState, i: usize, f: usize, c: Cell<'_>) -> El {
         let l = &self.look;
-        let selected = st.row_selected(i, None);
+        let selected = st.row_selected(i, None) || c.new.is_some_and(|n| self.marked(n));
         let tints = l.tints(c.kind);
         let fill = if selected { l.selected } else { tints.map_or(l.bg, |t| t.line) };
-        let digits = st.digits(f);
+        let digits = self.digits(st, f);
         let copy = match c.kind {
             LineKind::Context => true,
             LineKind::Added => st.copy_side() == Side::New,
@@ -415,9 +444,12 @@ impl View {
             .self_stretch()
             .items_stretch()
             .fill(l.gutter_fill(c.kind, selected))
-            .child(self.bar(c.kind))
-            .child(self.number(st, i, f, c.old, Side::Old, c.kind, selected, digits).key("no"))
-            .child(self.number(st, i, f, c.new, Side::New, c.kind, selected, digits).key("nn"));
+            .child(self.bar(c.kind));
+        if self.numbers {
+            gutter = gutter
+                .child(self.number(st, i, f, c.old, Side::Old, c.kind, selected, digits).key("no"))
+                .child(self.number(st, i, f, c.new, Side::New, c.kind, selected, digits).key("nn"));
+        }
         if self.bind.has_comment() {
             let at = c.new.map(|n| LineRef::new(Side::New, n)).or(c.old.map(|n| LineRef::new(Side::Old, n)));
             if let Some(at) = at {
@@ -441,7 +473,7 @@ impl View {
     }
 
     fn split<'a>(&self, st: &'a DiffState, i: usize, f: usize, old: Option<Cell<'a>>, new: Option<Cell<'a>>) -> El {
-        let digits = st.digits(f);
+        let digits = self.digits(st, f);
         let single = st.single_column(f);
         let half = |side: Side, c: Option<Cell<'a>>| -> El {
             let l = &self.look;
@@ -466,9 +498,11 @@ impl View {
                 .hover_group()
                 .role("listitem")
                 .label(cell.label())
-                .child(self.bar(kind))
-                .child(self.number(st, i, f, n, side, kind, selected, digits).key("n"))
-                .child(self.code(st, f, &cell, copy, side, &st.keys[i]).key("code"));
+                .child(self.bar(kind));
+            if self.numbers {
+                h = h.child(self.number(st, i, f, n, side, kind, selected, digits).key("n"));
+            }
+            h = h.child(self.code(st, f, &cell, copy, side, &st.keys[i]).key("code"));
             if let (Some(n), true) = (n, self.bind.has_comment()) {
                 h = h.child(self.plus(f, LineRef::new(side, n)).absolute(BAR + l.number_w(digits) - 10.0, 2.0));
             }
@@ -506,14 +540,14 @@ impl View {
         }
         if let Some(n) = n {
             let color = if selected { l.text } else { l.tints(kind).map_or(l.faint, |t| t.number) };
-            c = c.child(text(n.to_string()).font(l.font).color(color));
+            c = c.child(text(self.shown(side, n).to_string()).font(l.font).color(color));
         }
         let at = n.map(|n| LineRef::new(side, n)).or_else(|| {
             let other = if side == Side::Old { Side::New } else { Side::Old };
             unified.then(|| st.row_line(st.rows[i], other).map(|n| LineRef::new(other, n))).flatten()
         });
         let Some(at) = at else { return c };
-        self.bind.bind_number_drag(c.cursor(Cursor::Pointer), GutterDrag { file: f, at, side, unified, row_at: i as u32 })
+        self.bind.bind_number_drag(c, GutterDrag { file: f, at, side, unified, row_at: i as u32 })
     }
 
     /// The "+" that appears by the numbers of the hovered line.
@@ -562,8 +596,39 @@ impl View {
         code
     }
 
+    /// Line `n` of `side` as numbered from [`DiffView::first_lines`].
+    fn shown(&self, side: Side, n: u32) -> u32 {
+        n.saturating_add(self.first[side as usize] - 1)
+    }
+
+    /// Whether new-side line `n` is one [`InlineDiff::marked`] marks.
+    fn marked(&self, n: u32) -> bool {
+        let shown = self.shown(Side::New, n);
+        self.marks.iter().any(|lines| lines.contains(&shown))
+    }
+
+    /// The digits file `f`'s numbers take as shown.
+    fn digits(&self, st: &DiffState, f: usize) -> u32 {
+        let last = st.files()[f].last_line().saturating_add(self.first[0].max(self.first[1]) - 1);
+        st.digits(f).max(last.max(1).ilog10() + 1)
+    }
+
+    /// Hunk `h`'s header with its numbers as shown.
+    fn header(&self, h: &super::model::Hunk) -> String {
+        let range = |side: Side, start: u32, count: u32| {
+            let start = if start == 0 { start } else { self.shown(side, start) };
+            if count == 1 { format!("{start}") } else { format!("{start},{count}") }
+        };
+        let mut out = format!("@@ -{} +{} @@", range(Side::Old, h.old_start, h.old_count), range(Side::New, h.new_start, h.new_count));
+        if !h.section.is_empty() {
+            out.push(' ');
+            out.push_str(&h.section);
+        }
+        out
+    }
+
     fn gutter_w(&self, st: &DiffState, f: usize) -> f32 {
-        let n = self.look.number_w(st.digits(f));
+        let n = if self.numbers { self.look.number_w(self.digits(st, f)) } else { 0.0 };
         BAR + if st.mode() == DiffMode::Unified { 2.0 * n } else { n }
     }
 }

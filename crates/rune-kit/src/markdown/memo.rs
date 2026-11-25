@@ -57,6 +57,7 @@ pub(super) const HAS_OPEN_TABLE: u8 = 1 << 4;
 pub(super) const HAS_INLINE_CODE: u8 = 1 << 5;
 /// Inline math: like display math, its block builds every time, asking the math cache.
 pub(super) const HAS_MATH: u8 = 1 << 6;
+pub(super) const HAS_DIFF: u8 = 1 << 7;
 
 #[derive(Clone)]
 pub(super) struct PreRow {
@@ -243,7 +244,7 @@ pub(super) fn precompute_block(root_b: &Block, root_map: Option<&BlockMap>) -> R
                         (Block::Para(inl), _) => { 1u8.hash(&mut h); scan_inline(inl, &mut h, &mut flags, &mut links); }
                         (Block::Heading(level, inl), _) => { (2u8, *level).hash(&mut h); scan_inline(inl, &mut h, &mut flags, &mut links); }
                         (Block::Code(code), _) => { flags |= HAS_CODE; src_n = 1; (3u8, code).hash(&mut h); }
-                        (Block::Diff(src), _) => (4u8, src).hash(&mut h),
+                        (Block::Diff(src), _) => { flags |= HAS_DIFF; (4u8, src).hash(&mut h); }
                         (Block::Mermaid(src), _) => { flags |= HAS_MERMAID; src_n = 1; (5u8, src).hash(&mut h); }
                         (Block::Rule, _) => 6u8.hash(&mut h),
                         (Block::Image { src, alt, title }, _) => { flags |= HAS_IMAGE; (7u8, src, alt, title).hash(&mut h); }
@@ -397,6 +398,7 @@ impl Renderer {
 
     fn can_memo_flags(&self, flags: u8) -> bool {
         if flags & HAS_MATH != 0 { return false; }
+        if flags & HAS_DIFF != 0 && self.code_frame.as_ref().is_some_and(|w| w.diff.is_some()) { return false; }
         if flags & HAS_CODE != 0 && (!self.highlighter.is_builtin() || self.code_frame.as_ref().is_some_and(|w| w.frame.is_some() || w.wrap.is_some())) { return false; }
         if flags & HAS_MERMAID != 0 {
             #[cfg(feature = "mermaid")]
@@ -457,7 +459,7 @@ impl Renderer {
                     (Block::Para(inl), _) => { 1u8.hash(h); if !self.hash_inline_direct(inl, h) { return false; } }
                     (Block::Heading(level, inl), _) => { (2u8, *level).hash(h); if !self.hash_inline_direct(inl, h) { return false; } }
                     (Block::Code(code), _) => { if !self.can_memo_flags(HAS_CODE) { return false; } (3u8, self.wrap_code_default(), code).hash(h); }
-                    (Block::Diff(src), _) => (4u8, src).hash(h),
+                    (Block::Diff(src), _) => { if !self.can_memo_flags(HAS_DIFF) { return false; } (4u8, src).hash(h); }
                     (Block::Mermaid(src), _) => { if !self.can_memo_flags(HAS_MERMAID) { return false; } (5u8, src).hash(h); }
                     (Block::Rule, _) => 6u8.hash(h),
                     (Block::Image { src, alt, title }, _) => { if !self.can_memo_flags(HAS_IMAGE) { return false; } (7u8, src, alt, title).hash(h); }

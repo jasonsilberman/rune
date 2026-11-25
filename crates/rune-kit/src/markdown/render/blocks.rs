@@ -517,7 +517,10 @@ impl Renderer {
                     None => self.code(code, source, code_map, wrapped),
                 }
             }
-            Block::Diff(src) => self.diff(src, code_map),
+            Block::Diff(src) => match self.code_frame.as_ref().and_then(|w| w.diff.as_ref()) {
+                Some(f) => f(&DiffBlock { source: src }),
+                None => self.diff(src, code_map),
+            },
             Block::Mermaid(src) => {
                 let n = self.next_source.get();
                 self.next_source.set(n + 1);

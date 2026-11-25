@@ -7,8 +7,10 @@ use std::rc::Rc;
 use super::myers::{self, Op};
 use super::pairs;
 
+mod fragment;
 mod parse;
 
+pub use fragment::parse_fragment;
 pub use parse::parse;
 
 /// The two sides of a diff: the text before the change and after it.

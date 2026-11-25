@@ -55,7 +55,7 @@ impl View {
         // Pierre's words, which OpenCode Desktop shows untranslated.
         let count = if hidden == 1 { "1 unmodified line".to_owned() } else { format!("{hidden} unmodified lines") };
         let mut inner = row().key("inner").h(GAP_H).min_w(0.0);
-        if hidden > 0 && file.expandable() {
+        if hidden > 0 && file.expandable() && self.bind.expands() {
             let steps: Vec<(Expand, &'static Icon, String)> = match (first, last) {
                 (true, _) => vec![(Expand::Up, &LINE_INFO_DOWN, format!("Show {} more lines above", hidden.min(EXPAND_STEP)))],
                 (_, true) => vec![(Expand::Down, &LINE_INFO_UP, format!("Show {} more lines below", hidden.min(EXPAND_STEP)))],
