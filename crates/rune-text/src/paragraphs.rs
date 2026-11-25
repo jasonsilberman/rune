@@ -657,7 +657,7 @@ impl TextSystem {
         let indented = blocks.iter().any(|&b| b != Block::Paragraph).then_some(blocks);
         let pretty = spec.by_line && spec.pretty && !input && max_width.is_some() && !matches!(spec.style.family, Family::Mono | Family::SystemMono);
         let pretty_bit = if pretty { 0x7072_6574_7479_0001 } else { 0 };
-        let key = hash::break_key(whole ^ PARAGRAPHS, max_width, align, indented) ^ pretty_bit ^ spec.look.map_or(0, |l| l.key());
+        let key = hash::break_key(whole ^ PARAGRAPHS, max_width, align, indented) ^ pretty_bit ^ spec.look_key();
         let g = self.generation;
         if let Some(e) = self.paragraphs.get_mut(&key) {
             e.used = g;
@@ -668,7 +668,7 @@ impl TextSystem {
         let prev = match prev {
             Some(TextLayout::Paragraphs(p)) if p.max_width == max_width && p.align == align => Some(p.clone()),
             Some(TextLayout::Paragraphs(p)) => {
-                let there = hash::break_key(p.whole ^ PARAGRAPHS, max_width, align, indented) ^ pretty_bit ^ spec.look.map_or(0, |l| l.key());
+                let there = hash::break_key(p.whole ^ PARAGRAPHS, max_width, align, indented) ^ pretty_bit ^ spec.look_key();
                 Some(self.paragraphs.get(&there).map_or_else(|| p.clone(), |e| e.value.clone()))
             }
             _ => None,
@@ -768,7 +768,8 @@ impl TextSystem {
         for (k, ((a, b, flow, key, isolates, run), kept)) in items.into_iter().enumerate() {
             let block = spec.blocks.get(k).copied().unwrap_or(Block::Paragraph);
             let prev = k.checked_sub(1).and_then(|p| spec.blocks.get(p)).copied().unwrap_or(Block::Paragraph);
-            y += if k > 0 { f64::from((block.gap_after(prev, metrics) * scale).round()) } else { 0.0 };
+            let soft = spec.soft_breaks.binary_search(&(k as u32)).is_ok();
+            y += if k > 0 && !soft { f64::from((block.gap_after(prev, metrics) * scale).round()) } else { 0.0 };
             let own = block.paragraph_style(style, metrics);
             let own_line = own.line_px() * scale;
             let pad = block.pad_px(metrics, scale);

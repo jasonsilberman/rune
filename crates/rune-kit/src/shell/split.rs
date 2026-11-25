@@ -351,7 +351,7 @@ impl SplitView {
             if toggle && t.in_header {
                 band = band.child(el().key("sidebar-spacer").grow(1.0).a11y_hidden()).child(el().key("sidebar-toggle-slot").w(side).ml(8.0).a11y_hidden());
             }
-            let content = Contents { pad: self.padding, slide: peek.is_some(), peek, band: Some(band), hold: pane_hold };
+            let content = Contents { pad: self.padding, grip: GRIP, slide: peek.is_some(), peek, band: Some(band), hold: pane_hold };
             dock(&d, "sidebar-pane", p, true, content)
         });
         let toolbar = self
@@ -374,12 +374,13 @@ impl SplitView {
             if let Some(c) = p.clear.take() {
                 clears.push(c);
             }
+            let grip = if self.side_header.is_some() { self.frame.max(GRIP) } else { GRIP };
             if let Some(header) = self.side_header {
                 let header = header.padding(12.0).build(k);
                 let side = card(k, "side-pane", Some(header), p.content).grow(1.0).min_w(0.0);
                 p.content = row().key("side-pane-frame").w_full().h_full().pl(self.frame).pr(self.frame).pb(self.frame).child(side);
             }
-            let content = Contents { pad: [0.0; 2], slide: false, peek: None, band: None, hold: None };
+            let content = Contents { pad: [0.0; 2], grip, slide: false, peek: None, band: None, hold: None };
             below = below.child(dock(&d, "inspector-pane", p, false, content));
         }
         let strip = self.in_panel.then(|| el().key("titlebar-strip").w_full().h(self.frame).window_drag());
@@ -575,6 +576,7 @@ struct Dock<'a> {
 /// How one pane holds its contents.
 struct Contents {
     pad: [f32; 2],
+    grip: f32,
     slide: bool,
     peek: Option<SidebarPeek>,
     band: Option<El>,
@@ -679,7 +681,7 @@ fn dock(d: &Dock, key: &str, p: Pane, leading: bool, content: Contents) -> El {
             // Its value is the pane's width; a reader's increment and decrement step it.
             .range_value(f64::from(s.width()), f64::from(s.min_width()), f64::from(s.max_width()))
             .range_step(f64::from(GRIP_STEP))
-            .w(GRIP)
+            .w(content.grip)
             .cursor(Cursor::ResizeColumn)
             .fill(Color::TRANSPARENT)
             .opacity(0.02)

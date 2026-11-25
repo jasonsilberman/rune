@@ -8,6 +8,7 @@ fn input<'a>(content: &'a str, blocks: &'a [Block], style: TextStyle, dir: TextD
         spans: &[],
         blocks,
         look: None,
+        soft_breaks: &[],
         pills: &[],
         style,
         shape_key: None,
@@ -116,4 +117,34 @@ b";
     ts.highlight_decorations_flow(list_laid.view(), &[hl], multi.len(), scale, [0.0, 0.0], f32::NEG_INFINITY..f32::INFINITY, &mut decos);
     assert_eq!(decos.len(), 3, "one highlight box per paragraph");
     assert_eq!(decos[1].rect[0], num_indent, "empty list item highlight starts after indent");
+}
+
+#[test]
+fn a_look_spaces_paragraphs_but_not_the_lines_a_soft_break_starts() {
+    let mut ts = TextSystem::default();
+    let style = TextStyle { line_height: 24.0, ..TextStyle::new(15.0, 400.0) };
+    let h = |size| crate::HeadingLook { size, weight: 700.0, line_height: size + 6.0, tracking: 0.0, before: 24.0, after: 8.0 };
+    let look = crate::BlockLook {
+        headings: [h(28.0), h(21.0), h(17.0)],
+        paragraph_gap: 6.0,
+        list_gap: 2.0,
+        list_indent: 28.0,
+        level_indent: 24.0,
+        marker_gap: 8.0,
+        check_size: 16.0,
+        check_ring: None,
+        check_fill: None,
+        check_tick: None,
+        quote_indent: 16.0,
+        quote_bar: 3.0,
+    };
+    let blocks = [Block::Paragraph, Block::Paragraph];
+    let mut step = |soft: &[u32]| {
+        let spec = TextInput { look: Some(look), soft_breaks: soft, ..input("one\ntwo", &blocks, style, TextDir::Fixed(Flow::Ltr)) };
+        let laid = ts.layout_text(&spec, true, 1.0, Some(400.0), Alignment::Start, None);
+        let top = |at| laid.view().caret(at, Affinity::Downstream, 1.0).y0;
+        (top(4) - top(0)).round()
+    };
+    assert_eq!(step(&[]), 30.0);
+    assert_eq!(step(&[1]), 24.0);
 }

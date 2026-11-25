@@ -12,6 +12,9 @@ pub struct TextInput<'a> {
     pub blocks: &'a [Block],
     /// The field's document metrics for its blocks ([`crate::BlockLook`]), if it sets them.
     pub look: Option<crate::BlockLook>,
+    /// Paragraph indices (`> 0`) that a soft line break (`Shift+Return`) started, sorted: they
+    /// continue the paragraph before them, so no block gap goes above them.
+    pub soft_breaks: &'a [u32],
     pub pills: &'a [PillChip],
     pub style: TextStyle,
     pub shape_key: Option<u64>,
@@ -24,6 +27,13 @@ pub struct TextInput<'a> {
 }
 
 impl TextInput<'_> {
+    /// A hash of the block look and the soft breaks, which move paragraphs without reshaping
+    /// them, for keying a whole layout.
+    pub(crate) fn look_key(&self) -> u64 {
+        let breaks = self.soft_breaks.iter().fold(0x9e37_79b9_7f4a_7c15_u64, |h, &b| (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3));
+        self.look.map_or(0, |l| l.key()) ^ if self.soft_breaks.is_empty() { 0 } else { breaks }
+    }
+
     /// The flow a by-paragraph text's paragraphs with no strong character start from: the
     /// element's, left to right when nothing sets one.
     pub(crate) fn plaintext_flow(&self) -> Flow {

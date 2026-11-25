@@ -195,6 +195,7 @@ impl TextSpec {
             spans: &self.spans,
             blocks: &self.cold.blocks,
             look: self.cold.block_look,
+            soft_breaks: &self.cold.soft_breaks,
             pills: &self.cold.pills,
             style: self.style,
             shape_key: self.shape_key(scale),
