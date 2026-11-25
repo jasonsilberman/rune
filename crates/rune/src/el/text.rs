@@ -266,7 +266,7 @@ impl El {
     pub(crate) fn sync_input_rich(&mut self) {
         let (Some(inp), Some(t)) = (&self.cold.input, &mut self.text) else { return };
         t.cold.rich_style = Some(inp.rich_style);
-        if inp.edit.is_plain() && inp.decorations.is_empty() && inp.decoration_strikes.is_empty() {
+        if inp.edit.is_plain() && inp.decorations.is_empty() && inp.decoration_strikes.is_empty() && inp.presence.is_empty() {
             // A plain field lays out and draws exactly as before rich editing existed.
             t.spans.clear();
             t.cold.strikes.clear();
@@ -285,9 +285,24 @@ impl El {
                 base_spans.push(sp);
             }
         }
+        for p in &inp.presence {
+            for (ds, de) in inp.edit.map_range_to_display(p.start.min(p.end), p.start.max(p.end)) {
+                base_spans.push(Span { start: ds, end: de, bg: Some(p.color.alpha(p.color.a * 0.22)), ..Span::default() });
+            }
+        }
         for &(start, end, color) in &inp.decoration_strikes {
             for (ds, de) in inp.edit.map_range_to_display(start as usize, end as usize) {
                 strikes.push((ds, de, color));
+            }
+        }
+        if inp.rich_style.marker.is_none() {
+            let mut start = 0u32;
+            for (line, words) in t.content.split('\n').enumerate() {
+                let end = start + words.len() as u32;
+                if blocks.get(line) == Some(&crate::edit::Block::Check(true)) && start < end {
+                    base_spans.push(Span { start, end, color: Some(t.color.alpha(t.color.a * 0.5)), ..Span::default() });
+                }
+                start = end + 1;
             }
         }
         let pill_fg = t.cold.pill_colors.and_then(|(_, fg)| fg);

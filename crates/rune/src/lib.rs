@@ -103,6 +103,7 @@ pub use el::Phase;
 pub use el::PillStyle;
 pub use el::PointerEvent;
 pub use el::PointerPress;
+pub use el::Presence;
 pub use el::RadialRadius;
 pub use el::ScrollFade;
 pub use el::ScrollSpec;

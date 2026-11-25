@@ -675,6 +675,8 @@ fn meta_json(m: &Meta) -> serde_json::Value {
             Block::Code => serde_json::json!("c"),
             Block::Bullet(l) => serde_json::json!(["b", l]),
             Block::Numbered(l) => serde_json::json!(["n", l]),
+            Block::Heading(l) => serde_json::json!(["h", l]),
+            Block::Check(done) => serde_json::json!(["x", u8::from(*done)]),
         })
         .collect();
     serde_json::json!({ "a": m.anchor, "f": m.focus, "m": marks, "k": blocks, "s": m.soft_breaks })
@@ -711,6 +713,8 @@ fn meta_from(v: &serde_json::Value) -> Option<Meta> {
             (Some("c"), ..) => Some(Block::Code),
             (_, Some("b"), Some(l)) => Some(Block::Bullet((l as u8).min(MAX_LIST_LEVEL))),
             (_, Some("n"), Some(l)) => Some(Block::Numbered((l as u8).min(MAX_LIST_LEVEL))),
+            (_, Some("h"), Some(l)) => Some(Block::Heading((l as u8).clamp(1, rune_text::MAX_HEADING_LEVEL))),
+            (_, Some("x"), Some(done)) => Some(Block::Check(done != 0)),
             _ => None,
         })
         .collect::<Option<Vec<_>>>()?;

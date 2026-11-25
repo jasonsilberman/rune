@@ -113,7 +113,10 @@ impl TextEdit {
             Key::Text(s) => {
                 if s.chars().any(|c| !c.is_control() || (!self.is_single_line() && matches!(c, '\n' | '\r' | '\t'))) {
                     let s = self.sanitize(s);
-                    if !s.is_empty() { self.replace(self.range(), &s, if s.contains(['\r', '\n']) { EditKind::LineBreak } else { EditKind::Text }); }
+                    if !s.is_empty() {
+                        self.replace(self.range(), &s, if s.contains(['\r', '\n']) { EditKind::LineBreak } else { EditKind::Text });
+                        if &*s == " " { self.expand_markdown_shortcut(); }
+                    }
                 }
             }
             // A composition's Return and Escape are the input method's.
@@ -163,6 +166,17 @@ impl TextEdit {
                                     self.insert_newline(Block::Quote, false);
                                 }
                             }
+                            Block::Check(_) => {
+                                if a == b && line_range.is_empty() {
+                                    self.set_block(Block::Paragraph);
+                                } else {
+                                    self.insert_newline(Block::Check(false), false);
+                                }
+                            }
+                            Block::Heading(_) => {
+                                let next = if b >= line_range.end { Block::Paragraph } else { blk };
+                                self.insert_newline(next, false);
+                            }
                             Block::Paragraph => {
                                 out.submit = true;
                             }
@@ -200,6 +214,9 @@ impl TextEdit {
                                 } else {
                                     self.set_block(Block::Paragraph);
                                 }
+                            }
+                            Block::Heading(_) | Block::Check(_) => {
+                                self.set_block(Block::Paragraph);
                             }
                             Block::Quote | Block::Code => {
                                 if a == 0 || line_range.is_empty() {

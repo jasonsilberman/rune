@@ -116,6 +116,9 @@ pub struct TextEdit {
     pub affinity: parley::Affinity,
     /// The direction Ctrl+Left Shift or Ctrl+Right Shift set (`direction_keys`).
     dir: FieldDir,
+    /// Typing a Markdown block prefix and a space turns the line into that block
+    /// ([`TextEdit::markdown_shortcuts`]).
+    shortcuts: bool,
 }
 
 impl std::fmt::Debug for TextEdit {
@@ -261,6 +264,7 @@ impl TextEdit {
             column: Column::Free,
             affinity: parley::Affinity::Downstream,
             dir: FieldDir::Natural,
+            shortcuts: false,
         }
     }
 
@@ -293,6 +297,15 @@ impl TextEdit {
 
     pub fn is_rich(&self) -> bool {
         self.rich
+    }
+
+    /// Markdown block shortcuts, as a notes app has: at the start of a line, `# `, `## ` and
+    /// `### ` make a heading, `- ` or `* ` a bullet, `1. ` a numbered item, `> ` a quote, and
+    /// `[] `, `[ ] `, `- [ ] ` or `[x] ` a checklist item. The prefix goes and the line takes
+    /// the block. Off by default, so a chat field keeps what was typed.
+    pub fn markdown_shortcuts(mut self) -> Self {
+        self.shortcuts = true;
+        self
     }
 
     /// Keep only these kinds of inline mark, for a field whose storage can't hold the rest (an
@@ -755,5 +768,7 @@ impl TextEdit {
     }
 }
 
+#[cfg(test)]
+mod notes_tests;
 #[cfg(test)]
 mod tests;

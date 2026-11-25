@@ -456,6 +456,46 @@ impl TextEdit {
         self.record_change(before, EditKind::Other);
     }
 
+    /// Check or uncheck the [`Block::Check`] item on line `line` as one undo step, leaving the
+    /// selection where it is: a press on its checkbox. Any other line is left alone.
+    pub fn toggle_check(&mut self, line: usize) {
+        if self.secure || self.is_single_line() {
+            return;
+        }
+        self.sync_invariants();
+        let Some(&Block::Check(done)) = self.blocks.get(line) else { return };
+        self.break_history_group();
+        let before = self.snapshot();
+        self.blocks[line] = Block::Check(!done);
+        self.record_change(before, EditKind::Other);
+    }
+
+    pub(crate) fn expand_markdown_shortcut(&mut self) {
+        if !self.shortcuts || self.anchor != self.focus {
+            return;
+        }
+        let at = self.focus;
+        let line = self.line_of_byte(at);
+        let start = self.line_range(line).start;
+        let have = self.blocks.get(line).copied().unwrap_or(Block::Paragraph);
+        let block = match (have, &self.text[start..at]) {
+            (Block::Paragraph, "# ") => Block::Heading(1),
+            (Block::Paragraph, "## ") => Block::Heading(2),
+            (Block::Paragraph, "### ") => Block::Heading(3),
+            (Block::Paragraph, "- " | "* ") => Block::Bullet(0),
+            (Block::Paragraph, "1. ") => Block::Numbered(0),
+            (Block::Paragraph, "> ") => Block::Quote,
+            (Block::Paragraph | Block::Bullet(_), "[] " | "[ ] ") | (Block::Paragraph, "- [ ] ") => Block::Check(false),
+            (Block::Paragraph | Block::Bullet(_), "[x] " | "[X] ") => Block::Check(true),
+            _ => return,
+        };
+        if !self.allows_block(block) {
+            return;
+        }
+        self.replace((start, at), "", EditKind::Other);
+        self.set_block(block);
+    }
+
     /// Toggle `block` on all paragraphs in the selection: if every selected paragraph already has
     /// the same block kind as `block`, resets them to [`Block::Paragraph`]; otherwise sets `block`
     /// (preserving list nesting level when switching between bullet and numbered lists).
@@ -466,7 +506,8 @@ impl TextEdit {
         self.sync_invariants();
         let (first, last) = self.selected_line_range();
         let all_match = (first..=last).all(|i| {
-            self.blocks.get(i).copied().unwrap_or(Block::Paragraph).same_kind(block)
+            let have = self.blocks.get(i).copied().unwrap_or(Block::Paragraph);
+            if matches!(block, Block::Heading(_)) { have == block } else { have.same_kind(block) }
         });
         if all_match {
             self.set_block(Block::Paragraph);

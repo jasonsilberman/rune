@@ -39,6 +39,24 @@ pub struct InputSpec {
     pub(crate) spellcheck: bool,
     /// [`El::selection_style`]: the selection's highlight and ink, by window focus, over `selection`.
     pub(crate) selection_style: Option<SelectionStyle>,
+    /// [`El::presence`]: other people's selections and carets in the same text.
+    pub(crate) presence: Vec<Presence>,
+}
+
+/// Another person's place in a shared [`text_input`]: their selection from byte `start` to
+/// `end` of `edit.text`, caret at `end`, in their `color` ([`El::presence`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Presence {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) color: Color,
+}
+
+impl Presence {
+    /// Someone's selection `start..end` (bytes of `edit.text`; equal for a bare caret) in `color`.
+    pub fn new(start: usize, end: usize, color: Color) -> Presence {
+        Presence { start, end, color }
+    }
 }
 
 impl std::fmt::Debug for InputSpec {
@@ -101,6 +119,7 @@ pub fn text_input(edit: &TextEdit, style: TextStyle) -> El {
         paste: None,
         spellcheck: false,
         selection_style: None,
+        presence: Vec::new(),
     }));
     e.sync_input_pills();
     e.sync_input_rich();
@@ -127,6 +146,17 @@ pub fn edit_access<S, F: for<'a> Fn(&'a mut S) -> &'a mut TextEdit>(f: F) -> F {
 }
 
 impl El {
+    /// On a [`text_input`] editing shared text: where other people are in it. Each selection
+    /// is tinted in their colour under the text and their caret drawn in it, as a
+    /// collaborative editor shows its other editors. Offsets past the text are clamped.
+    pub fn presence(mut self, presence: impl IntoIterator<Item = Presence>) -> Self {
+        if let Some(inp) = self.cold.get_mut_if_some().and_then(|c| c.input.as_deref_mut()) {
+            inp.presence = presence.into_iter().collect();
+            self.sync_input_rich();
+        }
+        self
+    }
+
     /// On the root or around text fields: the app's spell checking setting, `on`, which the
     /// fields' menus show as a Spellcheck item with a check mark, as a browser's do. Picking it
     /// calls `f` with the setting flipped; the app keeps it and passes it to its fields'

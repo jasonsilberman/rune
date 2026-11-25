@@ -109,7 +109,14 @@ pub(in crate::runtime) fn emit_block_decorations(
                         markers.push((indent, baseline, blk, list_counts[l]));
                     }
                 }
-                Block::Paragraph | Block::Quote | Block::Code => {
+                Block::Check(_) => {
+                    if !is_soft {
+                        list_counts = [0; (MAX_LIST_LEVEL as usize) + 1];
+                        let indent = (blk.indent_pt(spec.style.size) * s).round();
+                        markers.push((indent, baseline, blk, 0));
+                    }
+                }
+                Block::Paragraph | Block::Quote | Block::Code | Block::Heading(_) => {
                     if !is_soft {
                         list_counts = [0; (MAX_LIST_LEVEL as usize) + 1];
                     }
@@ -142,7 +149,11 @@ pub(in crate::runtime) fn emit_block_decorations(
                 let indent = (blk.indent_pt(spec.style.size) * s).round();
                 markers.push((indent, baseline, blk, 1));
             }
-            Block::Paragraph => {}
+            Block::Check(_) => {
+                let indent = (blk.indent_pt(spec.style.size) * s).round();
+                markers.push((indent, baseline, blk, 0));
+            }
+            Block::Paragraph | Block::Heading(_) => {}
         }
     }
 
@@ -184,9 +195,99 @@ pub(in crate::runtime) fn emit_block_decorations(
                         );
                     }
                 }
+                Block::Check(done) => {
+                    let [x, y, d] = check_box(spec.style.size, s, tk, origin[0], indent_px, baseline_y);
+                    let (x, y) = (x + glide[0], y + glide[1]);
+                    let ring = (1.25 * s * tk).max(1.0);
+                    let accent = premul(spec.rich_style().link, o, srgb);
+                    instances.push(Instance {
+                        rect: [x, y, d, d],
+                        radii: [d * 0.5; 4],
+                        fill: if done { accent } else { [0.0; 4] },
+                        border: if done { accent } else { mc },
+                        params: [ring, KIND_RECT, 0.0, 1.0],
+                        uv: [0.0; 4],
+                        clip,
+                        fade: crate::render::pack_fade(fade, clip, clip),
+                    });
+                    if done {
+                        let tick = premul(Color::WHITE, o, srgb);
+                        let at = |u: f32, v: f32| [x + u * d, y + v * d];
+                        let hw = (0.9 * s * tk).max(0.75);
+                        for (a, b) in [(at(0.28, 0.52), at(0.44, 0.67)), (at(0.44, 0.67), at(0.73, 0.35))] {
+                            let pad = hw + 1.0;
+                            let (x0, y0) = (a[0].min(b[0]) - pad, a[1].min(b[1]) - pad);
+                            instances.push(Instance {
+                                rect: [x0, y0, a[0].max(b[0]) + pad - x0, a[1].max(b[1]) + pad - y0],
+                                radii: [a[0], a[1], b[0], b[1]],
+                                fill: tick,
+                                border: [0.0; 4],
+                                params: [hw, KIND_SEGMENT, 1.0, 1.0],
+                                uv: [0.0; 4],
+                                clip,
+                                fade: crate::render::pack_fade(fade, clip, clip),
+                            });
+                        }
+                    }
+                }
                 _ => {}
             }
         }
+    }
+}
+
+/// A [`Block::Check`](crate::edit::Block::Check) item's checkbox `[x, y, diameter]` in device
+/// px, for a body of `size` points at `s` device px a point and `tk` zoom: a circle in the
+/// list gutter, right of `origin_x` by the item's indent less a gap, centred on the x-height
+/// above `baseline`. Painting and the press that toggles it share it.
+pub(in crate::runtime) fn check_box(size: f32, s: f32, tk: f32, origin_x: f32, indent_px: f32, baseline: f32) -> [f32; 3] {
+    let d = (size * 1.05 * s).round().max(10.0) * tk;
+    let x = origin_x + (indent_px - (7.0 * s).round()) * tk - d;
+    let y = baseline - 0.34 * size * s * tk - d * 0.5;
+    if tk == 1.0 { [x.round(), y.round(), d] } else { [x, y, d] }
+}
+
+/// Field `n`'s [`El::presence`](crate::El::presence) carets in device px with their colours,
+/// placed as [`input_caret`] places the field's own: at each one's `end`, moved past an open
+/// composition. A single-line or masked field shows none.
+pub(in crate::runtime) fn presence_carets(n: &Node, r: [f32; 4], scale: f32, s: f32) -> Vec<([f32; 4], Color)> {
+    let (Some(spec), Some(laid), Some(input)) = (n.text.as_ref(), n.text_layout.as_ref(), n.input.as_ref()) else { return Vec::new() };
+    let e = &input.edit;
+    if input.presence.is_empty() || input.single_line || e.is_masked() {
+        return Vec::new();
+    }
+    let layout = laid.view();
+    let ins = n.inset.map(|v| v * scale * s);
+    let x = text_x(spec, r[0] + ins[0], r[2] - ins[2], text_width(layout.full_width() * scale), layout.flow());
+    let open = e.preedit().map(|(p, _)| (e.range().0, p.len()));
+    input
+        .presence
+        .iter()
+        .map(|p| {
+            let mut at = p.end.min(e.text.len());
+            while !e.text.is_char_boundary(at) {
+                at -= 1;
+            }
+            let shown = match open {
+                Some((from, len)) if at >= from => at + len,
+                _ => at,
+            }
+            .min(spec.content.len());
+            let bb = layout.caret(shown, parley::Affinity::Downstream, 1.5 * s);
+            let h = (if bb.y1 > bb.y0 { (bb.y1 - bb.y0) as f32 } else { spec.style.line_px() * s }) * scale;
+            let (cx, cy) = (x + bb.x0 as f32 * scale, r[1] + ins[1] + bb.y0 as f32 * scale);
+            ([cx.round(), cy, (2.0 * s * scale).round().max(1.0), h], p.color)
+        })
+        .collect()
+}
+
+/// Paints field `n`'s [`presence_carets`]: each a bar in its colour with a small cap on top.
+pub(in crate::runtime) fn push_presence_carets(out: &mut Vec<Instance>, n: &Node, r: [f32; 4], (scale, s): (f32, f32), (o, srgb): (f32, bool), clip: [f32; 4], fade: [f32; 4]) {
+    for (bar, tint) in presence_carets(n, r, scale, s) {
+        let ink = premul(tint, o, srgb);
+        let cap = (5.0 * s * scale).round().max(3.0);
+        out.push(rect_inst(bar, ink, 0.0, clip, fade));
+        out.push(rect_inst([bar[0] + bar[2] * 0.5 - cap * 0.5, bar[1] - cap * 0.6, cap, cap], ink, cap * 0.3, clip, fade));
     }
 }
 

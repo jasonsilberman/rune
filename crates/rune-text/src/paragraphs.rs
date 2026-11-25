@@ -766,6 +766,7 @@ impl TextSystem {
         let (mut width, mut full_width, mut fresh) = (0.0f32, 0.0f32, 0);
         for (k, ((a, b, flow, key, isolates, run), kept)) in items.into_iter().enumerate() {
             let block = spec.blocks.get(k).copied().unwrap_or(Block::Paragraph);
+            y += if k > 0 { f64::from((block.space_before_pt(style.size) * scale).round()) } else { 0.0 };
             let pad = block.pad_px(style.size, scale);
             let blocks: &[Block] = if block == Block::Paragraph { &[] } else { std::slice::from_ref(&block) };
             // A waiting record kept at the same width stays as it was; a run found here waits.

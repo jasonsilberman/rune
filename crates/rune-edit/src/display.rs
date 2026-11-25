@@ -141,30 +141,25 @@ impl TextEdit {
         let (disp_text, _) = self.display();
         let display_blocks = self.display_blocks(&disp_text);
         let mut line_start = 0usize;
-        let mut line_idx = 0usize;
-        for (i, b) in disp_text.bytes().enumerate() {
-            if b == b'\n' {
-                if display_blocks.get(line_idx) == Some(&Block::Code) && line_start < i {
-                    spans.push(Span {
-                        start: line_start as u32,
-                        end: i as u32,
-                        mono: true,
-                        color: style.code_fg,
-                        ..Span::default()
-                    });
-                }
-                line_start = i + 1;
-                line_idx += 1;
+        for (line_idx, line) in disp_text.split('\n').enumerate() {
+            let (start, end) = (line_start as u32, (line_start + line.len()) as u32);
+            line_start += line.len() + 1;
+            if start >= end {
+                continue;
             }
-        }
-        if display_blocks.get(line_idx) == Some(&Block::Code) && line_start < disp_text.len() {
-            spans.push(Span {
-                start: line_start as u32,
-                end: disp_text.len() as u32,
-                mono: true,
-                color: style.code_fg,
-                ..Span::default()
-            });
+            match display_blocks.get(line_idx).copied().unwrap_or(Block::Paragraph) {
+                Block::Code => spans.push(Span { start, end, mono: true, color: style.code_fg, ..Span::default() }),
+                block @ Block::Heading(_) => {
+                    if let Some((size, weight)) = block.heading_style(base_style.size) {
+                        spans.push(Span { start, end, size: Some(size), weight: Some(weight), ..Span::default() });
+                    }
+                }
+                Block::Check(true) => {
+                    strikes.push((start, end, style.marker));
+                    spans.push(Span { start, end, color: style.marker, ..Span::default() });
+                }
+                _ => {}
+            }
         }
 
         (spans, strikes, links, display_blocks)

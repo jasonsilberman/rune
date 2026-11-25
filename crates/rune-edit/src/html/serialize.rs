@@ -118,6 +118,30 @@ pub(crate) fn serialize_html(edit: &TextEdit, range: Range<usize>) -> String {
                 }
                 out.push_str("</blockquote>");
             }
+            Block::Heading(level) => {
+                let tag = format!("h{}", level.clamp(1, rune_text::MAX_HEADING_LEVEL));
+                out.push('<');
+                out.push_str(&tag);
+                out.push_str(dirs[idx]);
+                out.push('>');
+                serialize_inline(edit, paras[idx].1.clone(), &mut out);
+                idx += 1;
+                out.push_str("</");
+                out.push_str(&tag);
+                out.push('>');
+            }
+            Block::Check(done) => {
+                out.push_str("<ul");
+                out.push_str(dirs[idx]);
+                out.push_str("><li><input type=\"checkbox\" disabled");
+                if done {
+                    out.push_str(" checked");
+                }
+                out.push('>');
+                serialize_inline(edit, paras[idx].1.clone(), &mut out);
+                idx += 1;
+                out.push_str("</li></ul>");
+            }
             Block::Paragraph => {
                 out.push_str("<p");
                 out.push_str(dirs[idx]);

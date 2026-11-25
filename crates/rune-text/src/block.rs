@@ -16,7 +16,16 @@ pub enum Block {
     Quote,
     /// Monospace code block line with a background fill; inline marks do not apply.
     Code,
+    /// Heading line at level `1..=MAX_HEADING_LEVEL` (title, heading, subheading), drawn
+    /// larger and bolder than the body.
+    Heading(u8),
+    /// Checklist item with a checkbox before it; `true` when checked, which dims and strikes
+    /// its text.
+    Check(bool),
 }
+
+/// Deepest [`Block::Heading`] level.
+pub const MAX_HEADING_LEVEL: u8 = 3;
 
 impl Block {
     pub fn is_list(self) -> bool {
@@ -48,6 +57,8 @@ impl Block {
                 | (Block::Numbered(_), Block::Numbered(_))
                 | (Block::Quote, Block::Quote)
                 | (Block::Code, Block::Code)
+                | (Block::Heading(_), Block::Heading(_))
+                | (Block::Check(_), Block::Check(_))
         )
     }
 
@@ -60,6 +71,32 @@ impl Block {
             Block::Numbered(_) => 2,
             Block::Quote => 3,
             Block::Code => 4,
+            Block::Heading(_) => 5,
+            Block::Check(_) => 6,
+        }
+    }
+
+    /// The font size and weight a [`Block::Heading`] line draws at for a body of `size`
+    /// points: level 1 a title, 2 a heading, 3 a subheading. `None` for other blocks.
+    pub fn heading_style(self, size: f32) -> Option<(f32, f32)> {
+        match self {
+            Block::Heading(level) => Some(match level.clamp(1, MAX_HEADING_LEVEL) {
+                1 => ((size * 1.75).round(), 700.0),
+                2 => ((size * 1.35).round(), 650.0),
+                _ => ((size * 1.12).round(), 600.0),
+            }),
+            _ => None,
+        }
+    }
+
+    /// Room in points above a line of this block that follows another, for a body of `size`
+    /// points: a heading stands apart from what comes before it.
+    pub fn space_before_pt(self, size: f32) -> f32 {
+        match self {
+            Block::Heading(1) => (size * 0.9).round(),
+            Block::Heading(2) => (size * 0.75).round(),
+            Block::Heading(_) => (size * 0.5).round(),
+            _ => 0.0,
         }
     }
 
@@ -72,6 +109,8 @@ impl Block {
             Block::Bullet(l) | Block::Numbered(l) => unit * (l.min(MAX_LIST_LEVEL) as f32 + 1.0),
             Block::Quote => (font_size * 1.1).round().max(14.0),
             Block::Code => (font_size * 0.75).round().max(10.0),
+            Block::Heading(_) => 0.0,
+            Block::Check(_) => (font_size * 1.9).round().max(26.0),
         }
     }
 

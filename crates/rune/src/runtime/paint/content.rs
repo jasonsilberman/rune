@@ -813,6 +813,7 @@ impl RuntimeCore {
                     self.paint.text_quads.insert(id, (d, self.paint.quads_frame));
                 }
             }
+            push_presence_carets(&mut self.instances, n, r, (sc, s), (o, srgb), clip, fade);
             if let (Some(c), Some(inp)) = (caret, &n.input) {
                 self.instances.push(rect_inst(c, premul(if inp.caret_inked { inp.caret } else { color }, o, srgb), 0.0, clip, fade));
             }

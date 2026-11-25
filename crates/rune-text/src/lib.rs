@@ -53,6 +53,7 @@ pub use atlas::fill_bench;
 pub use atlas::glyph_emit::GLIDE_PHASES;
 pub use atlas::mask_cache;
 pub use block::Block;
+pub use block::MAX_HEADING_LEVEL;
 pub use block::MAX_LIST_LEVEL;
 pub use direction::Direction;
 #[doc(hidden)]

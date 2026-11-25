@@ -260,6 +260,8 @@ impl RuntimeCore {
             return false;
         };
         let single = self.tree.nodes[i].input.as_ref().is_some_and(|inp| inp.single_line);
+        let change = self.tree.nodes[i].input.as_ref().and_then(|inp| inp.change.clone());
+        let size = self.tree.nodes[i].text.as_ref().map_or(0.0, |t| t.style.size);
         let layout = self.tree.nodes[i].text_layout.clone();
         let point = self.input_text_point(i, x, y);
         let s = self.env.scale;
@@ -281,6 +283,20 @@ impl RuntimeCore {
                 }
                 if let (Some(l), Some([tx, ty])) = (layout, point) {
                     let h = hit(e, l.view(), tx, ty, s, single);
+                    let line = e.line_of_byte(h.caret);
+                    if clicks == 1 && !shift && let Some(&gutter @ crate::edit::Block::Check(_)) = e.blocks().get(line)
+                        && (0.0..gutter.indent_pt(size)).contains(&tx)
+                    {
+                        e.toggle_check(line);
+                        self.edit.clear_input_click();
+                        if let Some(change) = change {
+                            change(app.states(), one);
+                            access(app.states()).mark_edited();
+                        }
+                        one.commit = one.commit.instant();
+                        return true;
+                    }
+                    let e = access(app.states());
                     if shift {
                         let anchor = e.anchor;
                         self.edit.input_click.unit = Unit::Char;
