@@ -648,7 +648,7 @@ impl TextSystem {
         if !spec.by_line && spec.pills.is_empty() && !spec.content.contains('\n') {
             let base = forced.or_else(|| flow_of(spec.content, &[])).unwrap_or(spec.plaintext_flow()).base();
             let shape = spec.shape_key.map(|k| hash::directed(k, base));
-            return TextLayout::Single(self.layout_keyed(shape, spec.content, spec.spans, spec.blocks, &[], spec.style, scale, max_width, align, spec.wrap_anywhere, false, Keep::Cached, base));
+            return TextLayout::Single(self.layout_keyed(shape, spec.content, spec.spans, spec.blocks, spec.look, &[], spec.style, scale, max_width, align, spec.wrap_anywhere, false, Keep::Cached, base));
         }
         let whole = spec.shape_key.unwrap_or_else(|| spec.fresh_shape_key(scale));
         // Lines with no strong character take the element's flow, so it keys the whole too.
@@ -657,7 +657,7 @@ impl TextSystem {
         let indented = blocks.iter().any(|&b| b != Block::Paragraph).then_some(blocks);
         let pretty = spec.by_line && spec.pretty && !input && max_width.is_some() && !matches!(spec.style.family, Family::Mono | Family::SystemMono);
         let pretty_bit = if pretty { 0x7072_6574_7479_0001 } else { 0 };
-        let key = hash::break_key(whole ^ PARAGRAPHS, max_width, align, indented) ^ pretty_bit;
+        let key = hash::break_key(whole ^ PARAGRAPHS, max_width, align, indented) ^ pretty_bit ^ spec.look.map_or(0, |l| l.key());
         let g = self.generation;
         if let Some(e) = self.paragraphs.get_mut(&key) {
             e.used = g;
@@ -668,7 +668,7 @@ impl TextSystem {
         let prev = match prev {
             Some(TextLayout::Paragraphs(p)) if p.max_width == max_width && p.align == align => Some(p.clone()),
             Some(TextLayout::Paragraphs(p)) => {
-                let there = hash::break_key(p.whole ^ PARAGRAPHS, max_width, align, indented) ^ pretty_bit;
+                let there = hash::break_key(p.whole ^ PARAGRAPHS, max_width, align, indented) ^ pretty_bit ^ spec.look.map_or(0, |l| l.key());
                 Some(self.paragraphs.get(&there).map_or_else(|| p.clone(), |e| e.value.clone()))
             }
             _ => None,
@@ -694,7 +694,7 @@ impl TextSystem {
         let (content, style) = (spec.content, spec.style);
         let style_key = {
             let mut h = hash::KeyHasher::default();
-            (hash::text_hash("", &[], style, scale, None), spec.wrap_anywhere).hash(&mut h);
+            (hash::text_hash("", &[], style, scale, None), spec.wrap_anywhere, spec.look.map(|l| l.key())).hash(&mut h);
             h.finish()
         };
         // A plain or colour-only text's edit keys only the paragraphs it touched: those before it
@@ -762,15 +762,20 @@ impl TextSystem {
         let pretty = spec.by_line && spec.pretty && !input;
         let pretty_active = pretty && max_width.is_some() && !matches!(style.family, Family::Mono | Family::SystemMono);
         let mut waiting = 0;
+        let metrics = crate::BlockMetrics::new(style.size, spec.look);
         let (mut paragraphs, mut y) = (Vec::with_capacity(items.len()), 0.0f64);
         let (mut width, mut full_width, mut fresh) = (0.0f32, 0.0f32, 0);
         for (k, ((a, b, flow, key, isolates, run), kept)) in items.into_iter().enumerate() {
             let block = spec.blocks.get(k).copied().unwrap_or(Block::Paragraph);
-            y += if k > 0 { f64::from((block.space_before_pt(style.size) * scale).round()) } else { 0.0 };
-            let pad = block.pad_px(style.size, scale);
+            let prev = k.checked_sub(1).and_then(|p| spec.blocks.get(p)).copied().unwrap_or(Block::Paragraph);
+            y += if k > 0 { f64::from((block.gap_after(prev, metrics) * scale).round()) } else { 0.0 };
+            let own = block.paragraph_style(style, metrics);
+            let own_line = own.line_px() * scale;
+            let pad = block.pad_px(metrics, scale);
             let blocks: &[Block] = if block == Block::Paragraph { &[] } else { std::slice::from_ref(&block) };
             // A waiting record kept at the same width stays as it was; a run found here waits.
             let wait = match (kept, run) {
+                _ if own != style => None,
                 (Some(o), _) if !o.shaped => ascii.clone().or_else(|| self.ascii_line(style, scale, spec.wrap_anywhere).filter(|a| !spec.by_line || a.fixed_pitch))
                     .map(|m| (m.height, o.height, o.widths[0], o.lines, o.layout.clone(), o.run)),
                 (None, Some((height, w, lines))) => ascii.clone().or_else(|| self.ascii_line(style, scale, spec.wrap_anywhere).filter(|a| !spec.by_line || a.fixed_pitch))
@@ -794,7 +799,7 @@ impl TextSystem {
                 (_, Some(o)) => {
                     fresh += b - a;
                     let mut l = o.layout.clone();
-                    line_break::rebreak(Rc::make_mut(&mut l), blocks, style.size, scale, max_width, align);
+                    line_break::rebreak(Rc::make_mut(&mut l), blocks, metrics, scale, max_width, align);
                     // Re-broken, in place or as a copy: the lines it draws now are new.
                     self.layout_ids.build(&l);
                     l
@@ -806,21 +811,21 @@ impl TextSystem {
                     let text: Cow<str> = if isolates.is_empty() { Cow::Borrowed(words) } else { Cow::Owned(with_isolates(words, &isolates)) };
                     let spans: Vec<Span> = spans_in(&layout_spans, a, b, &isolates, layout_disjoint).collect();
                     let pills: Vec<PillChip> = pills_in(spec.pills, a, b, &isolates).collect();
-                    self.layout_keyed(Some(key), &text, &spans, blocks, &pills, style, scale, max_width, align, spec.wrap_anywhere, pretty, Keep::Owned, flow.base())
+                    self.layout_keyed(Some(key), &text, &spans, blocks, spec.look, &pills, own, scale, max_width, align, spec.wrap_anywhere, pretty, Keep::Owned, flow.base())
                 }
             };
             // A paragraph kept as it was keeps its measures too: touching 2,000 layouts to read
             // them again costs more than the edit.
             let (mut height, mut widths) = match (kept, again) {
                 (Some(o), None) => (o.height, o.widths),
-                _ => (if a == b { layout.height().max(line) } else { layout.height() }, [layout.width(), layout.full_width()]),
+                _ => (if a == b { layout.height().max(own_line) } else { layout.height() }, [layout.width(), layout.full_width()]),
             };
             let want_frac = if layout.len() > 1 { (y - y.floor()) as f32 } else { 0.0 };
             let have_frac = match (kept, again) { (Some(o), None) => o.y_frac, _ => 0.0 };
             if (want_frac - have_frac).abs() > 1e-5 {
-                line_break::rebreak_at_y(Rc::make_mut(&mut layout), blocks, style.size, scale, max_width, align, f64::from(want_frac));
+                line_break::rebreak_at_y(Rc::make_mut(&mut layout), blocks, metrics, scale, max_width, align, f64::from(want_frac));
                 self.layout_ids.build(&layout);
-                (height, widths) = (if a == b { layout.height().max(line) } else { layout.height() }, [layout.width(), layout.full_width()]);
+                (height, widths) = (if a == b { layout.height().max(own_line) } else { layout.height() }, [layout.width(), layout.full_width()]);
             }
             let py = if want_frac != 0.0 { y.floor() as f32 } else { y.round() as f32 };
             (width, full_width) = (width.max(widths[0]), full_width.max(widths[1]));

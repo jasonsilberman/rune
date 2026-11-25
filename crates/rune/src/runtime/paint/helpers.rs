@@ -22,7 +22,9 @@ pub(in crate::runtime) fn emit_block_decorations(
     clip: [f32; 4],
     fade: [f32; 4],
 ) {
-    use crate::edit::{Block, MAX_LIST_LEVEL};
+    use crate::edit::{Block, BlockMetrics, MAX_LIST_LEVEL};
+    let metrics = BlockMetrics::new(spec.style.size, spec.cold.block_look);
+    let gap = (Block::marker_gap(metrics) * s).round();
     let line_h_default = spec.style.line_px() * s * tk;
     let box_w = (x1 - x0).max(layout.full_width() * tk).max(40.0 * s * tk);
     let mut para_idx = 0usize;
@@ -94,7 +96,7 @@ pub(in crate::runtime) fn emit_block_decorations(
                     }
                     list_counts[l] = 0;
                     if !is_soft {
-                        let indent = (blk.indent_pt(spec.style.size) * s).round();
+                        let indent = (blk.indent_pt(metrics) * s).round();
                         markers.push((indent, baseline, blk, 0));
                     }
                 }
@@ -105,14 +107,14 @@ pub(in crate::runtime) fn emit_block_decorations(
                     }
                     if !is_soft {
                         list_counts[l] += 1;
-                        let indent = (blk.indent_pt(spec.style.size) * s).round();
+                        let indent = (blk.indent_pt(metrics) * s).round();
                         markers.push((indent, baseline, blk, list_counts[l]));
                     }
                 }
                 Block::Check(_) => {
                     if !is_soft {
                         list_counts = [0; (MAX_LIST_LEVEL as usize) + 1];
-                        let indent = (blk.indent_pt(spec.style.size) * s).round();
+                        let indent = (blk.indent_pt(metrics) * s).round();
                         markers.push((indent, baseline, blk, 0));
                     }
                 }
@@ -142,15 +144,15 @@ pub(in crate::runtime) fn emit_block_decorations(
             Block::Code => code_run = Some((top, bot)),
             Block::Quote => quote_run = Some((top, bot)),
             Block::Bullet(_) => {
-                let indent = (blk.indent_pt(spec.style.size) * s).round();
+                let indent = (blk.indent_pt(metrics) * s).round();
                 markers.push((indent, baseline, blk, 0));
             }
             Block::Numbered(_) => {
-                let indent = (blk.indent_pt(spec.style.size) * s).round();
+                let indent = (blk.indent_pt(metrics) * s).round();
                 markers.push((indent, baseline, blk, 1));
             }
             Block::Check(_) => {
-                let indent = (blk.indent_pt(spec.style.size) * s).round();
+                let indent = (blk.indent_pt(metrics) * s).round();
                 markers.push((indent, baseline, blk, 0));
             }
             Block::Paragraph | Block::Heading(_) => {}
@@ -167,7 +169,7 @@ pub(in crate::runtime) fn emit_block_decorations(
             match blk {
                 Block::Bullet(lvl) => {
                     let d = if tk == 1.0 { (4.5 * s).round().max(3.0) } else { (4.5 * s * tk).max(3.0 * tk) };
-                    let cx = origin[0] + (indent_px - (7.0 * s).round()) * tk - d;
+                    let cx = origin[0] + (indent_px - gap) * tk - d;
                     let cy = baseline_y - 0.34 * spec.style.size * s * tk - d * 0.5;
                     let (cx, cy) = if tk == 1.0 { (cx.round(), cy.round()) } else { (cx, cy) };
                     let radius = if lvl >= 2 { 1.0 * s * tk } else { d * 0.5 };
@@ -179,7 +181,7 @@ pub(in crate::runtime) fn emit_block_decorations(
                     let ml = text_sys.layout_rich(&label, &[], spec.style, s, None);
                     let mw = ml.full_width();
                     let m_base = ml.lines().next().map_or(spec.style.size * 0.8 * s, |l| l.metrics().baseline);
-                    let mx = origin[0] + (indent_px - (5.0 * s).round() - mw) * tk;
+                    let mx = origin[0] + (indent_px - gap - mw) * tk;
                     let my = baseline_y - m_base * tk;
                     let m_origin = if tk == 1.0 { [mx.round(), my.round()] } else { [mx, my] };
                     let m_r_origin = if scale_motion == ScaleMotion::Still { m_origin } else { [0.0, 0.0] };
@@ -196,22 +198,24 @@ pub(in crate::runtime) fn emit_block_decorations(
                     }
                 }
                 Block::Check(done) => {
-                    let [x, y, d] = check_box(spec.style.size, s, tk, origin[0], indent_px, baseline_y);
+                    let [x, y, d] = check_box(metrics, s, tk, origin[0], indent_px, baseline_y);
                     let (x, y) = (x + glide[0], y + glide[1]);
                     let ring = (1.25 * s * tk).max(1.0);
-                    let accent = premul(spec.rich_style().link, o, srgb);
+                    let look = spec.cold.block_look;
+                    let accent = premul(look.and_then(|l| l.check_fill).unwrap_or(spec.rich_style().link), o, srgb);
+                    let edge = look.and_then(|l| l.check_ring).map_or(mc, |c| premul(c, o, srgb));
                     instances.push(Instance {
                         rect: [x, y, d, d],
                         radii: [d * 0.5; 4],
                         fill: if done { accent } else { [0.0; 4] },
-                        border: if done { accent } else { mc },
+                        border: if done { accent } else { edge },
                         params: [ring, KIND_RECT, 0.0, 1.0],
                         uv: [0.0; 4],
                         clip,
                         fade: crate::render::pack_fade(fade, clip, clip),
                     });
                     if done {
-                        let tick = premul(Color::WHITE, o, srgb);
+                        let tick = premul(look.and_then(|l| l.check_tick).unwrap_or(Color::WHITE), o, srgb);
                         let at = |u: f32, v: f32| [x + u * d, y + v * d];
                         let hw = (0.9 * s * tk).max(0.75);
                         for (a, b) in [(at(0.28, 0.52), at(0.44, 0.67)), (at(0.44, 0.67), at(0.73, 0.35))] {
@@ -240,9 +244,10 @@ pub(in crate::runtime) fn emit_block_decorations(
 /// px, for a body of `size` points at `s` device px a point and `tk` zoom: a circle in the
 /// list gutter, right of `origin_x` by the item's indent less a gap, centred on the x-height
 /// above `baseline`. Painting and the press that toggles it share it.
-pub(in crate::runtime) fn check_box(size: f32, s: f32, tk: f32, origin_x: f32, indent_px: f32, baseline: f32) -> [f32; 3] {
-    let d = (size * 1.05 * s).round().max(10.0) * tk;
-    let x = origin_x + (indent_px - (7.0 * s).round()) * tk - d;
+pub(in crate::runtime) fn check_box(m: crate::edit::BlockMetrics, s: f32, tk: f32, origin_x: f32, indent_px: f32, baseline: f32) -> [f32; 3] {
+    let size = m.size;
+    let d = (m.look.map_or(size * 1.05, |l| l.check_size) * s).round().max(10.0) * tk;
+    let x = origin_x + (indent_px - (crate::edit::Block::marker_gap(m) * s).round()) * tk - d;
     let y = baseline - 0.34 * size * s * tk - d * 0.5;
     if tk == 1.0 { [x.round(), y.round(), d] } else { [x, y, d] }
 }

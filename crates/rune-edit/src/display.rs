@@ -46,6 +46,7 @@ impl TextEdit {
         &self,
         base_style: rune_core::tok::TextStyle,
         style: RichStyle,
+        look: Option<rune_text::BlockLook>,
     ) -> (Vec<Span>, Vec<(u32, u32, Option<Color>)>, Vec<Link>, Vec<Block>) {
         if self.secure {
             return (Vec::new(), Vec::new(), Vec::new(), Vec::new());
@@ -150,8 +151,8 @@ impl TextEdit {
             match display_blocks.get(line_idx).copied().unwrap_or(Block::Paragraph) {
                 Block::Code => spans.push(Span { start, end, mono: true, color: style.code_fg, ..Span::default() }),
                 block @ Block::Heading(_) => {
-                    if let Some((size, weight)) = block.heading_style(base_style.size) {
-                        spans.push(Span { start, end, size: Some(size), weight: Some(weight), ..Span::default() });
+                    if let Some(h) = block.heading_look(rune_text::BlockMetrics::new(base_style.size, look)) {
+                        spans.push(Span { start, end, size: Some(h.size), weight: Some(h.weight), ..Span::default() });
                     }
                 }
                 Block::Check(true) => {

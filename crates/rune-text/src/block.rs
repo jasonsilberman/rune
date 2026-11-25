@@ -76,33 +76,57 @@ impl Block {
         }
     }
 
-    /// The font size and weight a [`Block::Heading`] line draws at for a body of `size`
-    /// points: level 1 a title, 2 a heading, 3 a subheading. `None` for other blocks.
-    pub fn heading_style(self, size: f32) -> Option<(f32, f32)> {
-        match self {
-            Block::Heading(level) => Some(match level.clamp(1, MAX_HEADING_LEVEL) {
-                1 => ((size * 1.75).round(), 700.0),
-                2 => ((size * 1.35).round(), 650.0),
-                _ => ((size * 1.12).round(), 600.0),
-            }),
-            _ => None,
+    /// The size, weight, line height and tracking a [`Block::Heading`] line draws at: the
+    /// look's when the field has one, else 1.75, 1.35 or 1.12 times the body at weights 700,
+    /// 650 and 600 on the body's leading. `None` for other blocks.
+    pub fn heading_look(self, m: BlockMetrics) -> Option<HeadingLook> {
+        let Block::Heading(level) = self else { return None };
+        let level = level.clamp(1, MAX_HEADING_LEVEL);
+        if let Some(look) = m.look {
+            return Some(look.headings[usize::from(level - 1)]);
         }
+        let (scale, weight) = match level {
+            1 => (1.75, 700.0),
+            2 => (1.35, 650.0),
+            _ => (1.12, 600.0),
+        };
+        let size = (m.size * scale).round();
+        Some(HeadingLook { size, weight, line_height: 0.0, tracking: 0.0, before: (m.size * [0.9, 0.75, 0.5][usize::from(level - 1)]).round(), after: 0.0 })
     }
 
-    /// Room in points above a line of this block that follows another, for a body of `size`
-    /// points: a heading stands apart from what comes before it.
-    pub fn space_before_pt(self, size: f32) -> f32 {
-        match self {
-            Block::Heading(1) => (size * 0.9).round(),
-            Block::Heading(2) => (size * 0.75).round(),
-            Block::Heading(_) => (size * 0.5).round(),
-            _ => 0.0,
+    /// Points between a line of `prev` and the next line, of `self`, when a new paragraph
+    /// starts there: the larger of what `prev` leaves after it and `self` wants before it, as
+    /// CSS margins collapse. Items of one list sit `list_gap` apart and the lines of one quote
+    /// or code block touch. Without a look, only headings stand apart.
+    pub fn gap_after(self, prev: Block, m: BlockMetrics) -> f32 {
+        let Some(look) = m.look else {
+            return self.heading_look(m).map_or(0.0, |h| h.before);
+        };
+        let listed = |b: Block| matches!(b, Block::Bullet(_) | Block::Numbered(_) | Block::Check(_));
+        if listed(prev) && listed(self) {
+            return look.list_gap;
         }
+        if (prev == Block::Quote && self == Block::Quote) || (prev == Block::Code && self == Block::Code) {
+            return 0.0;
+        }
+        let after = prev.heading_look(m).map_or(look.paragraph_gap, |h| h.after);
+        let before = self.heading_look(m).map_or(look.paragraph_gap, |h| h.before);
+        after.max(before)
     }
 
     /// Left indentation in points (before scale) for this block type.
     #[doc(hidden)]
-    pub fn indent_pt(self, font_size: f32) -> f32 {
+    pub fn indent_pt(self, m: BlockMetrics) -> f32 {
+        if let Some(look) = m.look {
+            return match self {
+                Block::Paragraph | Block::Heading(_) => 0.0,
+                Block::Bullet(l) | Block::Numbered(l) => look.list_indent + look.level_indent * f32::from(l.min(MAX_LIST_LEVEL)),
+                Block::Check(_) => look.list_indent,
+                Block::Quote => look.quote_indent,
+                Block::Code => (m.size * 0.75).round().max(10.0),
+            };
+        }
+        let font_size = m.size;
         let unit = (font_size * 1.45).round().max(18.0);
         match self {
             Block::Paragraph => 0.0,
@@ -114,10 +138,96 @@ impl Block {
         }
     }
 
+    /// Points between a list marker's trailing edge and its item's text.
+    #[doc(hidden)]
+    pub fn marker_gap(m: BlockMetrics) -> f32 {
+        m.look.map_or(7.0, |look| look.marker_gap)
+    }
+
+    /// The style a paragraph of this block lays out in: a heading's own size, weight, leading and
+    /// tracking when the field sets a [`BlockLook`], else the field's `style`.
+    pub(crate) fn paragraph_style(self, style: rune_core::tok::TextStyle, m: BlockMetrics) -> rune_core::tok::TextStyle {
+        match (m.look, self.heading_look(m)) {
+            (Some(_), Some(h)) => rune_core::tok::TextStyle {
+                size: h.size,
+                weight: h.weight,
+                line_height: if h.line_height > 0.0 { h.line_height } else { h.size * style.line_px() / style.size.max(1.0) },
+                tracking: h.tracking,
+                ..style
+            },
+            _ => style,
+        }
+    }
+
     /// Left indent and right padding in device px reserved during line breaking for this block.
-    pub(crate) fn pad_px(self, font_size: f32, scale: f32) -> [f32; 2] {
-        let indent = (self.indent_pt(font_size) * scale).round();
+    pub(crate) fn pad_px(self, m: BlockMetrics, scale: f32) -> [f32; 2] {
+        let indent = (self.indent_pt(m) * scale).round();
         let right = if self == Block::Code { indent } else { 0.0 };
         [indent, right]
+    }
+}
+
+/// How a [`Block::Heading`] level draws in a field with a [`BlockLook`], in points. A
+/// `line_height` of 0 keeps the body's leading ratio.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct HeadingLook {
+    pub size: f32,
+    pub weight: f32,
+    pub line_height: f32,
+    pub tracking: f32,
+    pub before: f32,
+    pub after: f32,
+}
+
+/// A document's block metrics, in points, for a rich field that sets them (`El::block_look`):
+/// each heading level's type and the room around it, the gap between paragraphs and between
+/// items of a list, where list text starts and how far each level indents, the marker's gap
+/// to its text, the checkbox, and the quote's indent and bar. A field without one keeps the
+/// formulas a chat field uses, from its body size.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BlockLook {
+    pub headings: [HeadingLook; MAX_HEADING_LEVEL as usize],
+    pub paragraph_gap: f32,
+    pub list_gap: f32,
+    pub list_indent: f32,
+    pub level_indent: f32,
+    pub marker_gap: f32,
+    pub check_size: f32,
+    pub check_ring: Option<rune_core::Color>,
+    pub check_fill: Option<rune_core::Color>,
+    pub check_tick: Option<rune_core::Color>,
+    pub quote_indent: f32,
+    pub quote_bar: f32,
+}
+
+impl BlockLook {
+    /// A hash of every metric and colour, for keying layouts laid out with it.
+    pub fn key(&self) -> u64 {
+        let mut words: Vec<u32> = Vec::with_capacity(64);
+        for h in &self.headings {
+            words.extend([h.size, h.weight, h.line_height, h.tracking, h.before, h.after].map(f32::to_bits));
+        }
+        words.extend(
+            [self.paragraph_gap, self.list_gap, self.list_indent, self.level_indent, self.marker_gap, self.check_size, self.quote_indent, self.quote_bar]
+                .map(f32::to_bits),
+        );
+        for c in [self.check_ring, self.check_fill, self.check_tick] {
+            words.extend(c.map_or([u32::MAX; 4], |c| [c.r, c.g, c.b, c.a].map(f32::to_bits)));
+        }
+        words.iter().fold(0xcbf2_9ce4_8422_2325_u64, |h, &w| (h ^ u64::from(w)).wrapping_mul(0x100_0000_01b3))
+    }
+}
+
+/// What a field's block decorations and indents are measured from: its body size and its
+/// [`BlockLook`], if it sets one.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct BlockMetrics {
+    pub size: f32,
+    pub look: Option<BlockLook>,
+}
+
+impl BlockMetrics {
+    pub fn new(size: f32, look: Option<BlockLook>) -> Self {
+        BlockMetrics { size, look }
     }
 }

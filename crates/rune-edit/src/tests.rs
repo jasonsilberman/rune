@@ -809,7 +809,7 @@ fn undo_redo_and_ime_preserve_marks_blocks_and_spans() {
     assert_eq!(e.display().0, "fn 日main() {}");
     assert_eq!(e.map_range_to_display(3, 7), vec![(6, 10)]);
     // And the preedit itself has the pending Italic mark in rich_display_specs.
-    let (spans, _, _, _) = e.rich_display_specs(rune_core::tok::TextStyle::new(14.0, 400.0), RichStyle::default());
+    let (spans, _, _, _) = e.rich_display_specs(rune_core::tok::TextStyle::new(14.0, 400.0), RichStyle::default(), None);
     assert!(spans.iter().any(|s| s.start == 3 && s.end == 6 && s.italic));
 
     // Commit IME preedit: Italic mark is committed on "日" (3..6).

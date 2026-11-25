@@ -141,6 +141,7 @@ pub struct SplitView {
     main: El,
     sidebar: Option<Pane>,
     inspector: Option<Pane>,
+    side_header: Option<Toolbar>,
     toolbar: Option<Toolbar>,
     inset: f32,
     show_toggle: bool,
@@ -159,6 +160,7 @@ impl SplitView {
             main,
             sidebar: None,
             inspector: None,
+            side_header: None,
             toolbar: None,
             inset: 0.0,
             show_toggle: true,
@@ -180,6 +182,17 @@ impl SplitView {
     /// The trailing pane, resized from its leading edge.
     pub fn inspector<S: 'static>(mut self, state: &PaneState, access: fn(&mut S) -> &mut PaneState, content: El) -> Self {
         self.inspector = Some(pane(*state, access, content, -1.0, false));
+        self
+    }
+    /// A second card beside the main one, as an editor's split shows a second document: the same
+    /// fill, corner radius and ring, its own `header` (a [`Toolbar`] 48 points tall, as the main
+    /// card's) over `body`, and [`Self::frame_inset`] points of window between the two cards,
+    /// which is also the grip that resizes it. `state`'s width covers the card and the gap and
+    /// margin around it. It opens and closes on the panes' spring. It takes the inspector's slot:
+    /// a view has one or the other.
+    pub fn side_pane<S: 'static>(mut self, state: &PaneState, access: fn(&mut S) -> &mut PaneState, header: Toolbar, body: El) -> Self {
+        self.inspector = Some(pane(*state, access, body, -1.0, false));
+        self.side_header = Some(header);
         self
     }
     /// The band above the main pane (and the inspector). Without one the band is empty and
@@ -348,26 +361,22 @@ impl SplitView {
             .build(k)
             .motion(spring);
         let (toolbar, above) = if self.in_panel { (Some(toolbar), None) } else { (None, Some(toolbar)) };
-        let card = col()
-            .key("main-pane")
+        let main_card = card(k, "main-pane", toolbar, self.main)
             .role("main")
             .grow(1.0)
             .min_w(0.0)
-            .min_h(0.0)
             .ml(if sidebar_open { 0.0 } else { self.frame })
             .mr(if inspector_open { 0.0 } else { self.frame })
             .mb(self.frame)
-            .fill(c.bg_base)
-            .radius(k.radius.lg)
-            .border(1.0, c.border_muted)
-            .clip_rounded(k.radius.lg)
-            .motion(spring)
-            .children(toolbar)
-            .child(self.main.grow(1.0).min_h(0.0));
-        let mut below = row().key("main-row").w_full().grow(1.0).min_h(0.0).motion(spring).child(card);
+            .motion(spring);
+        let mut below = row().key("main-row").w_full().grow(1.0).min_h(0.0).motion(spring).child(main_card);
         if let Some(mut p) = self.inspector {
             if let Some(c) = p.clear.take() {
                 clears.push(c);
+            }
+            if let Some(header) = self.side_header {
+                let header = header.padding(12.0).build(k);
+                p.content = card(k, "side-pane", Some(header), p.content).w_full().h_full().ml(self.frame).mr(self.frame).mb(self.frame);
             }
             let content = Contents { pad: [0.0; 2], slide: false, peek: None, band: None, hold: None };
             below = below.child(dock(&d, "inspector-pane", p, false, content));
@@ -387,6 +396,27 @@ impl SplitView {
         }
         root
     }
+}
+
+/// A pane's card: the window's content surface with rounded corners, `header` over `body`, and
+/// its ring drawn over both, so content that fills itself never covers the card's edge.
+fn card(k: &Kit, key: &str, header: Option<El>, body: El) -> El {
+    let ring = el()
+        .key("pane-ring")
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+        .radius(k.radius.lg)
+        .border(1.0, k.c.border_muted)
+        .inert()
+        .a11y_hidden();
+    col()
+        .key(key)
+        .min_h(0.0)
+        .fill(k.c.bg_base)
+        .radius(k.radius.lg)
+        .clip_rounded(k.radius.lg)
+        .children(header)
+        .child(body.grow(1.0).min_h(0.0))
+        .child(ring)
 }
 
 /// A full-window screen without side panes — a settings page, lock screen or onboarding view

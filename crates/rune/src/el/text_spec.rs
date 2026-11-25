@@ -111,6 +111,8 @@ pub(crate) struct TextCold {
     pub(crate) highlights: Vec<crate::text::TextHighlight>,
     /// Per-paragraph [`Block`](crate::Block) attributes for `content`.
     pub(crate) blocks: Vec<crate::edit::Block>,
+    /// See [`El::block_look`](crate::El::block_look).
+    pub(crate) block_look: Option<crate::edit::BlockLook>,
     /// Line indices (`> 0`) created by `Shift+Return` (`<br>`).
     pub(crate) soft_breaks: Vec<u32>,
     /// [`Mark::Pill`](crate::Mark::Pill) chips in `content`, sorted.
@@ -141,6 +143,7 @@ impl Empty for TextCold {
         strikes: Vec::new(),
         highlights: Vec::new(),
         blocks: Vec::new(),
+        block_look: None,
         soft_breaks: Vec::new(),
         pills: Vec::new(),
         isolates: Vec::new(),
@@ -191,6 +194,7 @@ impl TextSpec {
             content: &self.content,
             spans: &self.spans,
             blocks: &self.cold.blocks,
+            look: self.cold.block_look,
             pills: &self.cold.pills,
             style: self.style,
             shape_key: self.shape_key(scale),

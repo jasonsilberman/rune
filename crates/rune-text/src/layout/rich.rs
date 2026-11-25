@@ -10,6 +10,8 @@ pub struct TextInput<'a> {
     pub content: &'a str,
     pub spans: &'a [Span],
     pub blocks: &'a [Block],
+    /// The field's document metrics for its blocks ([`crate::BlockLook`]), if it sets them.
+    pub look: Option<crate::BlockLook>,
     pub pills: &'a [PillChip],
     pub style: TextStyle,
     pub shape_key: Option<u64>,
@@ -154,7 +156,7 @@ impl TextSystem {
         max_width: Option<f32>,
         options: RichLayoutOptions,
     ) -> Rc<Layout<Ink>> {
-        self.layout_keyed(None, text, spans, &[], &[], style, scale, max_width, options.align, options.wrap_anywhere, false, Keep::Cached, options.direction)
+        self.layout_keyed(None, text, spans, &[], None, &[], style, scale, max_width, options.align, options.wrap_anywhere, false, Keep::Cached, options.direction)
     }
 
     /// [`layout_aligned`](Self::layout_aligned) with per-paragraph [`Block`](crate::Block)
@@ -193,7 +195,7 @@ impl TextSystem {
         wrap_anywhere: bool,
         cache: bool,
     ) -> Rc<Layout<Ink>> {
-        self.layout_keyed(None, text, spans, blocks, pills, style, scale, max_width, align, wrap_anywhere, false, if cache { Keep::Cached } else { Keep::Secret }, parley::BaseDirection::Auto)
+        self.layout_keyed(None, text, spans, blocks, None, pills, style, scale, max_width, align, wrap_anywhere, false, if cache { Keep::Cached } else { Keep::Secret }, parley::BaseDirection::Auto)
     }
 
     /// Secure display runs must not enter the shared layout cache or leave character
@@ -207,7 +209,7 @@ impl TextSystem {
         max_width: Option<f32>,
         align: Alignment,
     ) -> Rc<Layout<Ink>> {
-        self.layout_keyed(spec.shape_key, spec.content, spec.spans, spec.blocks, spec.pills, spec.style, scale, max_width, align, spec.wrap_anywhere, spec.pretty, if spec.redacted { Keep::Secret } else { Keep::Cached }, spec.base())
+        self.layout_keyed(spec.shape_key, spec.content, spec.spans, spec.blocks, spec.look, spec.pills, spec.style, scale, max_width, align, spec.wrap_anywhere, spec.pretty, if spec.redacted { Keep::Secret } else { Keep::Cached }, spec.base())
     }
 
     /// [`Self::layout_blocks_inner`] of a cut of `spec`'s content, in its direction.
@@ -223,7 +225,7 @@ impl TextSystem {
         align: Alignment,
         cache: bool,
     ) -> Rc<Layout<Ink>> {
-        self.layout_keyed(None, text, spans, spec.blocks, &[], spec.style, scale, max_width, align, spec.wrap_anywhere, false, if cache { Keep::Cached } else { Keep::Secret }, spec.base())
+        self.layout_keyed(None, text, spans, spec.blocks, spec.look, &[], spec.style, scale, max_width, align, spec.wrap_anywhere, false, if cache { Keep::Cached } else { Keep::Secret }, spec.base())
     }
 }
 

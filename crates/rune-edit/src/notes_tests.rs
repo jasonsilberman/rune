@@ -90,3 +90,39 @@ fn heading_levels_toggle_exactly_and_survive_the_history_round_trip() {
     let html = e.to_html();
     assert!(html.contains("<h1>Title</h1>"), "{html}");
 }
+
+fn look() -> BlockLook {
+    let h = |size, before, after| HeadingLook { size, weight: 600.0, line_height: size + 6.0, tracking: 0.0, before, after };
+    BlockLook {
+        headings: [h(28.0, 32.0, 8.0), h(21.0, 24.0, 6.0), h(17.0, 16.0, 4.0)],
+        paragraph_gap: 6.0,
+        list_gap: 2.0,
+        list_indent: 28.0,
+        level_indent: 24.0,
+        marker_gap: 8.0,
+        check_size: 16.0,
+        check_ring: None,
+        check_fill: None,
+        check_tick: None,
+        quote_indent: 16.0,
+        quote_bar: 3.0,
+    }
+}
+
+#[test]
+fn a_look_collapses_gaps_aligns_list_text_and_leaves_other_fields_as_they_were() {
+    let m = BlockMetrics::new(15.0, Some(look()));
+    assert_eq!(Block::Heading(2).gap_after(Block::Paragraph, m), 24.0);
+    assert_eq!(Block::Paragraph.gap_after(Block::Heading(1), m), 8.0);
+    assert_eq!(Block::Check(false).gap_after(Block::Bullet(0), m), 2.0);
+    assert_eq!(Block::Paragraph.gap_after(Block::Check(true), m), 6.0);
+    assert_eq!(Block::Quote.gap_after(Block::Quote, m), 0.0);
+    for b in [Block::Bullet(0), Block::Numbered(0), Block::Check(false)] {
+        assert_eq!(b.indent_pt(m), 28.0, "{b:?}");
+    }
+    assert_eq!(Block::Bullet(2).indent_pt(m), 76.0);
+    let plain = BlockMetrics::new(14.0, None);
+    assert_eq!(Block::Paragraph.gap_after(Block::Heading(1), plain), 0.0);
+    assert_eq!(Block::Bullet(0).indent_pt(plain), 20.0);
+    assert_eq!(Block::Heading(1).heading_look(plain).map(|h| (h.size, h.weight)), Some((25.0, 700.0)));
+}

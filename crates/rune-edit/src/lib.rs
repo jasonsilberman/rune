@@ -59,6 +59,9 @@ pub use keys::fold;
 #[doc(hidden)]
 pub use keys::held;
 pub use model::Block;
+pub use model::BlockLook;
+pub use model::BlockMetrics;
+pub use model::HeadingLook;
 pub use model::MAX_LIST_LEVEL;
 pub use model::Mark;
 pub use model::MarkRange;

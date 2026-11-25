@@ -4,7 +4,7 @@ use std::ops::Range;
 
 use rune_core::color::{Color, oklch, oklcha};
 
-pub use rune_text::{Block, MAX_LIST_LEVEL};
+pub use rune_text::{Block, BlockLook, BlockMetrics, HeadingLook, MAX_LIST_LEVEL};
 
 /// An inline formatting mark stored alongside [`TextEdit::text`](super::TextEdit::text). More
 /// marks may come, so a `match` needs a `_` arm.

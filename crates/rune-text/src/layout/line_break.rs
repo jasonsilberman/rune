@@ -4,16 +4,16 @@ use crate::*;
 
 /// Breaks a shaped `layout` at `max_width` again and aligns its lines, as
 /// [`TextSystem::layout_keyed`] breaks the layouts it shapes.
-pub(crate) fn rebreak(layout: &mut Layout<Ink>, blocks: &[crate::Block], font_size: f32, scale: f32, max_width: Option<f32>, align: Alignment) {
-    rebreak_at_y(layout, blocks, font_size, scale, max_width, align, 0.0);
+pub(crate) fn rebreak(layout: &mut Layout<Ink>, blocks: &[crate::Block], m: crate::BlockMetrics, scale: f32, max_width: Option<f32>, align: Alignment) {
+    rebreak_at_y(layout, blocks, m, scale, max_width, align, 0.0);
 }
 
 /// [`rebreak`] starting at fractional vertical pixel phase `y_frac` (`y - y.floor()`), so a
 /// wrapped paragraph in a [`ParagraphLayout`](super::ParagraphLayout) quantizes each sub-line's
 /// `y` identically to [`Layout`](parley::Layout)'s accumulated `line_y`.
-pub(crate) fn rebreak_at_y(layout: &mut Layout<Ink>, blocks: &[crate::Block], font_size: f32, scale: f32, max_width: Option<f32>, align: Alignment, y_frac: f64) {
+pub(crate) fn rebreak_at_y(layout: &mut Layout<Ink>, blocks: &[crate::Block], m: crate::BlockMetrics, scale: f32, max_width: Option<f32>, align: Alignment, y_frac: f64) {
     if blocks.iter().any(|&b| b != crate::Block::Paragraph) || layout.inline_boxes().next().is_some() {
-        break_lines_with_blocks_at(layout, blocks, font_size, scale, max_width, Vec::new(), y_frac);
+        break_lines_with_blocks_at(layout, blocks, m, scale, max_width, Vec::new(), y_frac);
     } else if y_frac == 0.0 {
         layout.break_all_lines(max_width);
     } else {
@@ -28,24 +28,24 @@ pub(crate) fn rebreak_at_y(layout: &mut Layout<Ink>, blocks: &[crate::Block], fo
 /// `indented` (it has either), else at `max_width`; then, when `pretty`, a plain one's paragraphs
 /// that end on a lone short word again, as [`super::pretty`] scores them.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn break_new(layout: &mut Layout<Ink>, text: &str, blocks: &[crate::Block], indented: bool, font_size: f32, scale: f32, max_width: Option<f32>, pretty: bool) {
+pub(crate) fn break_new(layout: &mut Layout<Ink>, text: &str, blocks: &[crate::Block], indented: bool, m: crate::BlockMetrics, scale: f32, max_width: Option<f32>, pretty: bool) {
     if indented {
-        break_lines_with_blocks(layout, blocks, font_size, scale, max_width, Vec::new());
+        break_lines_with_blocks(layout, blocks, m, scale, max_width, Vec::new());
         // Pills (a link's icon, a mention's chip) wrap prettily too, as their inline boxes do in
         // Chromium; indented blocks (lists, quotes, code) keep the greedy lines.
         if let (true, Some(width)) = (pretty && blocks.iter().all(|&b| b == crate::Block::Paragraph), max_width) {
-            let caps = super::pretty::caps(layout, text, font_size, scale, width);
+            let caps = super::pretty::caps(layout, text, m.size, scale, width);
             if !caps.is_empty() {
-                break_lines_with_blocks(layout, blocks, font_size, scale, max_width, caps);
+                break_lines_with_blocks(layout, blocks, m, scale, max_width, caps);
             }
         }
         return;
     }
     layout.break_all_lines(max_width);
     if let (true, Some(width)) = (pretty, max_width) {
-        let caps = super::pretty::caps(layout, text, font_size, scale, width);
+        let caps = super::pretty::caps(layout, text, m.size, scale, width);
         if !caps.is_empty() {
-            break_lines_capped(layout, &[], font_size, scale, max_width, &caps, &mut Vec::new(), 0.0);
+            break_lines_capped(layout, &[], m, scale, max_width, &caps, &mut Vec::new(), 0.0);
         }
     }
 }
@@ -56,18 +56,18 @@ pub(crate) fn break_new(layout: &mut Layout<Ink>, text: &str, blocks: &[crate::B
 pub(crate) fn break_lines_with_blocks(
     layout: &mut Layout<Ink>,
     blocks: &[crate::Block],
-    font_size: f32,
+    m: crate::BlockMetrics,
     scale: f32,
     max_width: Option<f32>,
     caps: Vec<((usize, usize), f32)>,
 ) {
-    break_lines_with_blocks_at(layout, blocks, font_size, scale, max_width, caps, 0.0);
+    break_lines_with_blocks_at(layout, blocks, m, scale, max_width, caps, 0.0);
 }
 
 fn break_lines_with_blocks_at(
     layout: &mut Layout<Ink>,
     blocks: &[crate::Block],
-    font_size: f32,
+    m: crate::BlockMetrics,
     scale: f32,
     max_width: Option<f32>,
     mut caps: Vec<((usize, usize), f32)>,
@@ -79,7 +79,7 @@ fn break_lines_with_blocks_at(
     // can adjust the first misplaced pill in every paragraph at once.
     let mut lines_meta = Vec::new();
     for _ in 0..=2 * pills {
-        break_lines_capped(layout, blocks, font_size, scale, max_width, &caps, &mut lines_meta, y_frac);
+        break_lines_capped(layout, blocks, m, scale, max_width, &caps, &mut lines_meta, y_frac);
         if max_width.is_none() || pills == 0 || !collect_misplaced_pills(layout, &lines_meta, &mut caps) {
             return;
         }
@@ -92,7 +92,7 @@ fn break_lines_with_blocks_at(
 fn break_lines_capped(
     layout: &mut Layout<Ink>,
     blocks: &[crate::Block],
-    font_size: f32,
+    m: crate::BlockMetrics,
     scale: f32,
     max_width: Option<f32>,
     caps: &[((usize, usize), f32)],
@@ -109,7 +109,7 @@ fn break_lines_capped(
     let (mut para_idx, mut line_in_para) = (0usize, 0usize);
     while !breaker.is_done() {
         let blk = blocks.get(para_idx).copied().unwrap_or(crate::Block::Paragraph);
-        let [indent, right_pad] = blk.pad_px(font_size, scale);
+        let [indent, right_pad] = blk.pad_px(m, scale);
         let line_max = max_width
             .map_or(f32::MAX, |w| (w - indent - right_pad).max(1.0))
             .min(layout_max);

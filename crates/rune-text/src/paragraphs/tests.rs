@@ -7,6 +7,7 @@ fn input<'a>(content: &'a str, blocks: &'a [Block], style: TextStyle, dir: TextD
         content,
         spans: &[],
         blocks,
+        look: None,
         pills: &[],
         style,
         shape_key: None,
@@ -43,7 +44,7 @@ fn caret_on_empty_indented_block_matches_filled_block_start() {
 x", &blocks, style, TextDir::Fixed(Flow::Ltr)), true, scale, Some(max_w), Alignment::Start, None);
         let empty_x = empty.view().caret(4, Affinity::Downstream, caret_w).x0 as f32;
         let filled_x = filled.view().caret(4, Affinity::Downstream, caret_w).x0 as f32;
-        let indent = (blk.indent_pt(style.size) * scale).round();
+        let indent = (blk.indent_pt(crate::BlockMetrics::new(style.size, None)) * scale).round();
         assert_eq!(empty_x, filled_x, "LTR {blk:?}: empty caret x should match filled start");
         assert_eq!(empty_x, indent, "LTR {blk:?}: empty caret x should equal block indent");
         if blk == Block::Paragraph {
@@ -67,7 +68,7 @@ x", &blocks, style, TextDir::Fixed(Flow::Ltr)), true, scale, Some(max_w), Alignm
 ", &[Block::Paragraph, Block::Numbered(0)], style, TextDir::Fixed(Flow::Ltr)), true, scale, Some(max_w), Alignment::Start, None);
     let to_para = ts.layout_text(&input("one
 ", &[Block::Numbered(0), Block::Paragraph], style, TextDir::Fixed(Flow::Ltr)), true, scale, Some(max_w), Alignment::Start, None);
-    assert_eq!(to_list.view().caret(4, Affinity::Downstream, caret_w).x0 as f32, (Block::Numbered(0).indent_pt(style.size) * scale).round());
+    assert_eq!(to_list.view().caret(4, Affinity::Downstream, caret_w).x0 as f32, (Block::Numbered(0).indent_pt(crate::BlockMetrics::new(style.size, None)) * scale).round());
     assert_eq!(to_para.view().caret(4, Affinity::Downstream, caret_w).x0 as f32, 0.0);
 }
 
@@ -80,7 +81,7 @@ fn empty_indented_block_move_line_selection_and_highlight_use_indent() {
 
     // Moving up from an empty nested list item keeps its indented x as the column goal.
     let nested = Block::Bullet(2);
-    let indent = (nested.indent_pt(style.size) * scale).round();
+    let indent = (nested.indent_pt(crate::BlockMetrics::new(style.size, None)) * scale).round();
     let text = "hello world across the top line
 ";
     let laid = ts.layout_text(&input(text, &[Block::Paragraph, nested], style, TextDir::Fixed(Flow::Ltr)), true, scale, Some(max_w), Alignment::Start, None);
@@ -90,7 +91,7 @@ fn empty_indented_block_move_line_selection_and_highlight_use_indent() {
 
     // Selecting across a blank list item starts its newline box after the indent.
     let num = Block::Numbered(0);
-    let num_indent = (num.indent_pt(style.size) * scale).round();
+    let num_indent = (num.indent_pt(crate::BlockMetrics::new(style.size, None)) * scale).round();
     let multi = "a
 
 b";

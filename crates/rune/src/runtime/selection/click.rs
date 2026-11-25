@@ -261,7 +261,7 @@ impl RuntimeCore {
         };
         let single = self.tree.nodes[i].input.as_ref().is_some_and(|inp| inp.single_line);
         let change = self.tree.nodes[i].input.as_ref().and_then(|inp| inp.change.clone());
-        let size = self.tree.nodes[i].text.as_ref().map_or(0.0, |t| t.style.size);
+        let metrics = self.tree.nodes[i].text.as_ref().map_or_else(crate::edit::BlockMetrics::default, |t| crate::edit::BlockMetrics::new(t.style.size, t.cold.block_look));
         let layout = self.tree.nodes[i].text_layout.clone();
         let point = self.input_text_point(i, x, y);
         let s = self.env.scale;
@@ -285,7 +285,7 @@ impl RuntimeCore {
                     let h = hit(e, l.view(), tx, ty, s, single);
                     let line = e.line_of_byte(h.caret);
                     if clicks == 1 && !shift && let Some(&gutter @ crate::edit::Block::Check(_)) = e.blocks().get(line)
-                        && (0.0..gutter.indent_pt(size)).contains(&tx)
+                        && (0.0..gutter.indent_pt(metrics)).contains(&tx)
                     {
                         e.toggle_check(line);
                         self.edit.clear_input_click();

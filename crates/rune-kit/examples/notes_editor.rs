@@ -5,7 +5,7 @@
 //! `cargo run -p rune-kit --example notes_editor -- --snap notes.png`
 
 use rune::tok::type_;
-use rune::{AppSpec, Block, Cx, El, Mark, MarkRange, Presence, TextEdit, col, text_input};
+use rune::{AppSpec, Block, BlockLook, Color, Cx, El, HeadingLook, Mark, MarkRange, Presence, TextEdit, TextStyle, col, text_input};
 use rune_kit::Kit;
 
 struct State {
@@ -36,6 +36,27 @@ impl Default for State {
     }
 }
 
+fn heading(size: f32, weight: f32, line_height: f32, tracking: f32, before: f32, after: f32) -> HeadingLook {
+    HeadingLook { size, weight, line_height, tracking, before, after }
+}
+
+fn document(ink: Color, faint: Color, page: Color) -> BlockLook {
+    BlockLook {
+        headings: [heading(28.0, 700.0, 34.0, -0.3, 32.0, 8.0), heading(21.0, 650.0, 28.0, -0.2, 24.0, 6.0), heading(17.0, 600.0, 24.0, 0.0, 16.0, 4.0)],
+        paragraph_gap: 6.0,
+        list_gap: 2.0,
+        list_indent: 28.0,
+        level_indent: 24.0,
+        marker_gap: 8.0,
+        check_size: 16.0,
+        check_ring: Some(faint),
+        check_fill: Some(ink),
+        check_tick: Some(page),
+        quote_indent: 16.0,
+        quote_bar: 3.0,
+    }
+}
+
 fn view(s: &State, _: &mut Cx<State>) -> El {
     let k = Kit::neutral(true);
     let at = |needle: &str| s.edit.text.find(needle).unwrap_or(0);
@@ -46,11 +67,12 @@ fn view(s: &State, _: &mut Cx<State>) -> El {
         Presence::new(owns, owns, rune::oklch(0.68, 0.16, 150.0)),
     ];
     col().w_full().h_full().fill(k.c.page).padding(28.0).child(
-        text_input(&s.edit, type_::BODY)
+        text_input(&s.edit, TextStyle { size: 15.0, line_height: 24.0, ..type_::BODY })
             .key("note")
             .w_full()
             .color(k.c.text_base)
             .presence(presence)
+            .block_look(document(k.c.text_base, k.c.text_muted, k.c.page))
             .on_edit(|s: &mut State| &mut s.edit),
     )
 }

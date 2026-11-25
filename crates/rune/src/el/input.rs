@@ -41,6 +41,8 @@ pub struct InputSpec {
     pub(crate) selection_style: Option<SelectionStyle>,
     /// [`El::presence`]: other people's selections and carets in the same text.
     pub(crate) presence: Vec<Presence>,
+    /// [`El::block_look`]: the field's document metrics.
+    pub(crate) block_look: Option<crate::edit::BlockLook>,
 }
 
 /// Another person's place in a shared [`text_input`]: their selection from byte `start` to
@@ -120,6 +122,7 @@ pub fn text_input(edit: &TextEdit, style: TextStyle) -> El {
         spellcheck: false,
         selection_style: None,
         presence: Vec::new(),
+        block_look: None,
     }));
     e.sync_input_pills();
     e.sync_input_rich();
@@ -152,6 +155,21 @@ impl El {
     pub fn presence(mut self, presence: impl IntoIterator<Item = Presence>) -> Self {
         if let Some(inp) = self.cold.get_mut_if_some().and_then(|c| c.input.as_deref_mut()) {
             inp.presence = presence.into_iter().collect();
+            self.sync_input_rich();
+        }
+        self
+    }
+
+    /// On a rich [`text_input`] holding a document: its block metrics, as a notes app's or a
+    /// docs editor's styles set them, in place of the formulas a chat field's body size gives.
+    /// Headings lay out in their own size, weight, leading and tracking with room around them,
+    /// paragraphs and list items sit the given gaps apart (the larger of two neighbours'
+    /// margins, as CSS collapses them), list text starts at one indent for bullets, numbers and
+    /// checkboxes alike, and the checkbox takes the look's size and colours. Caret placement,
+    /// hit testing, selection and presence all follow the same layout.
+    pub fn block_look(mut self, look: crate::edit::BlockLook) -> Self {
+        if let Some(inp) = self.cold.get_mut_if_some().and_then(|c| c.input.as_deref_mut()) {
+            inp.block_look = Some(look);
             self.sync_input_rich();
         }
         self
