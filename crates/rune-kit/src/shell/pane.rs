@@ -24,6 +24,8 @@ pub struct PaneState {
     /// The width and the width it was made with (the default), as asked, before clamping, so a
     /// later `range` can widen to them.
     asked: [f32; 2],
+    /// Whether dragging its edge far enough closes it ([`PaneState::keep_open`] turns it off).
+    collapsible: bool,
 }
 
 /// Where a drag on a pane's edge started, which a cancel puts it back to.
@@ -77,7 +79,7 @@ impl PaneState {
 
     /// An open pane `width` points wide, which double-clicking its edge also returns to.
     pub fn new(width: f32) -> PaneState {
-        let mut p = PaneState { width, dock: Dock::Open { from_peek: false }, min: Self::MIN, max: Self::MAX, grip: Grip::Idle, asked: [width; 2] };
+        let mut p = PaneState { width, dock: Dock::Open { from_peek: false }, min: Self::MIN, max: Self::MAX, grip: Grip::Idle, asked: [width; 2], collapsible: true };
         p.clamp();
         p
     }
@@ -194,6 +196,12 @@ impl PaneState {
             Dock::Closed(ClosedPeek::Left) => Peek::Left,
         }
     }
+    /// Dragging its edge stops at its minimum instead of closing it: a split pane whose content
+    /// closes only through its own Close button.
+    pub fn keep_open(mut self) -> Self {
+        self.collapsible = false;
+        self
+    }
     /// Back to the width it was made with (double-clicking its edge).
     pub fn reset_width(&mut self) {
         self.width = self.default_width();
@@ -202,7 +210,9 @@ impl PaneState {
     /// width) once dragged below half its minimum, as AppKit's split views do. Dragging back
     /// out opens it again.
     pub fn drag_to(&mut self, width: f32) {
-        if width < self.min * 0.5 {
+        if !self.collapsible {
+            self.set_width(width);
+        } else if width < self.min * 0.5 {
             self.set_open(false);
         } else {
             self.set_open(true);
@@ -443,6 +453,19 @@ pub fn is_sidebar_toggle(ev: &KeyEvent) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pane_kept_open_stops_at_its_minimum_where_others_collapse() {
+        let mut kept = PaneState::new(520.0).range(360.0, 720.0).keep_open();
+        let mut flush = PaneState::new(520.0).range(360.0, 720.0);
+        for p in [&mut kept, &mut flush] {
+            p.drag_to(40.0);
+        }
+        assert!(kept.is_open() && kept.width() == 360.0);
+        assert!(!flush.is_open());
+        kept.drag_to(900.0);
+        assert_eq!(kept.width(), 720.0);
+    }
 
     #[test]
     fn a_peek_docks_where_it_floats_and_ends_when_closed() {
