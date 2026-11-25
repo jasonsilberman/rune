@@ -393,6 +393,8 @@ impl Host {
             surface: Some(surface),
             config,
             surface_ok: true,
+            #[cfg(target_os = "macos")]
+            layered: None,
             surface_retries: SurfaceRetries::for_mode(initial_mode),
             window,
             backoff: Backoff::default(),

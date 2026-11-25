@@ -233,6 +233,8 @@ pub(super) fn prepare_window_render(
         let rt = host.app.rt_mut();
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         let mut layers_again = false;
+        #[cfg(target_os = "macos")]
+        let mut layered = false;
         prepare_gpu_resources_with(renderer, gpu, rt, size, true, |renderer, rt| {
             // Playing clips on their own layer (`video_layer`): the surfaces this frame punches out.
             #[cfg(target_os = "windows")]
@@ -246,14 +248,22 @@ pub(super) fn prepare_window_render(
             }
             #[cfg(target_os = "macos")]
             {
-                let punched: Vec<usize> = rt.surfaces.iter().filter(|d| d.surface.is_layered()).map(|d| d.surface.key()).collect();
                 let scale = rt.env.scale.max(1.0) as f32;
+                let mut punched = Vec::new();
                 for d in rt.surfaces.iter().filter(|d| d.surface.is_layered()) {
-                    d.surface.set_hit(Some(surface_hit(d, &rt.instances, scale)));
+                    let mut hit = surface_hit(d, &rt.instances, scale);
+                    hit.punched = d.surface.hit().is_some_and(|before| before.visible == hit.visible);
+                    if hit.punched {
+                        punched.push(d.surface.key());
+                    } else {
+                        layers_again = true;
+                    }
+                    d.surface.set_hit(Some(hit));
                 }
                 if !punched.is_empty() && !renderer.surface_punch_ready() {
                     layers_again = true;
                 }
+                layered = !punched.is_empty();
                 renderer.set_punched_surfaces(punched);
             }
             #[cfg(not(any(target_os = "windows", target_os = "macos")))]
@@ -261,6 +271,13 @@ pub(super) fn prepare_window_render(
         });
         #[cfg(any(target_os = "windows", target_os = "macos"))]
         { info.animating |= layers_again; }
+        #[cfg(target_os = "macos")]
+        if l.config.alpha_mode != wgpu::CompositeAlphaMode::Opaque {
+            l.layered = Some(layered);
+            if let Some(surface) = &l.surface {
+                crate::platform::macos::set_opaque(surface, &l.window, !layered);
+            }
+        }
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]
         let _ = info;
         // The paint the instances come from, and on a loop-only frame the only ones it changed.
@@ -545,5 +562,5 @@ fn surface_hit(d: &crate::native_surface::SurfaceDraw, instances: &[crate::rende
         .filter(|r| !empty(r))
         .map(points)
         .collect();
-    crate::native_surface::SurfaceHit { visible: points(visible), covers }
+    crate::native_surface::SurfaceHit { visible: points(visible), covers, punched: false }
 }

@@ -156,6 +156,8 @@ pub type FrameObserver = Arc<dyn Fn(FrameTiming) + Send + Sync>;
 pub struct SurfaceHit {
     pub visible: [f32; 4],
     pub covers: Vec<[f32; 4]>,
+    /// The frame punched the place out: it held still since the frame before.
+    pub punched: bool,
 }
 struct State {
     latest: Option<Arc<Frame>>,
@@ -297,7 +299,9 @@ impl NativeSurface {
     }
     /// Punch this surface's place out of the window's pixels, so a native layer the app keeps
     /// under the window shows there; the window's corners, clips and anything drawn over the
-    /// place stay the window's own. Off, the surface draws its latest frame as usual.
+    /// place stay the window's own. Off, the surface draws its latest frame as usual. A frame
+    /// whose place moved since the frame before draws the latest frame instead of punching, so
+    /// a native layer that follows a frame late never shows out of place.
     pub fn set_layered(&self, layered: bool) {
         self.0.lock().unwrap().layered = layered;
     }
@@ -308,13 +312,17 @@ impl NativeSurface {
     pub fn set_hit(&self, hit: Option<SurfaceHit>) {
         self.0.lock().unwrap().hit = hit;
     }
+    #[doc(hidden)]
+    pub fn hit(&self) -> Option<SurfaceHit> {
+        self.0.lock().unwrap().hit.clone()
+    }
     /// Whether window point (`x`, `y`), in points, shows this layered surface as of the last
     /// frame: inside its drawn, clipped place and under nothing the window drew over it there
     /// (a popover, its shadow, a toast). A native view under the window takes a press here; any
     /// other point is the window's.
     pub fn shows_at(&self, x: f32, y: f32) -> bool {
         let inside = |r: &[f32; 4]| x >= r[0] && x < r[2] && y >= r[1] && y < r[3];
-        self.0.lock().unwrap().hit.as_ref().is_some_and(|h| inside(&h.visible) && !h.covers.iter().any(inside))
+        self.0.lock().unwrap().hit.as_ref().is_some_and(|h| h.punched && inside(&h.visible) && !h.covers.iter().any(inside))
     }
     pub fn is_mirrored(&self) -> bool {
         self.0.lock().unwrap().mirrored

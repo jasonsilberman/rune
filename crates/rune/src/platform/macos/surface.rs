@@ -15,6 +15,26 @@ pub(crate) fn present_with_transaction(surface: &wgpu::Surface, on: bool) {
     crate::gpu::with_layer(surface, |layer| unsafe { let _: () = msg_send![layer, setPresentsWithTransaction: Bool::new(on)]; });
 }
 
+/// Whether the window's layer composites as opaque. A transparent window's layer goes opaque
+/// while no native view under it shows, so the window server blends nothing then.
+pub(crate) fn set_opaque(surface: &wgpu::Surface, window: &winit::window::Window, on: bool) {
+    if let Some(window) = ns_window(window) {
+        if window.isOpaque() != on {
+            window.setOpaque(on);
+        }
+    }
+    use objc2::runtime::Bool;
+    // SAFETY: a live CAMetalLayer, on the main thread, between frames.
+    // A reconfigure (a resize, a new scale) sets the layer's opacity from the alpha mode again,
+    // so this checks the layer itself rather than remembering what it set.
+    crate::gpu::with_layer(surface, |layer| unsafe {
+        let now: Bool = msg_send![layer, isOpaque];
+        if now.as_bool() != on {
+            let _: () = msg_send![layer, setOpaque: Bool::new(on)];
+        }
+    });
+}
+
 /// A first frame drawn before AppKit has finished launching (the first window is made in
 /// `applicationWillFinishLaunching:`): Core Animation's transaction, which holds the window's
 /// layers and the drawable presented in it, goes to the window server now. The run loop turn

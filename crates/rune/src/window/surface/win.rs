@@ -147,6 +147,10 @@ pub(in crate::window) struct Win {
     /// device: no drawable can be taken from it (`acquire`), and its next frame replaces the
     /// surface and the device it drew with (`Host::reattach`).
     pub(in crate::window) surface_ok: bool,
+    /// Whether a layered native surface showed in the last frame (macOS), which keeps a
+    /// transparent window's layer blending; None until the first frame says.
+    #[cfg(target_os = "macos")]
+    pub(in crate::window) layered: Option<bool>,
     /// How many times in a row a frame tried to replace that surface and device, and the wait
     /// between tries (`SurfaceRetries`).
     pub(in crate::window) surface_retries: SurfaceRetries,
