@@ -2,6 +2,7 @@
 use super::*;
 
 pub(super) mod caret;
+pub(crate) mod caret_at;
 pub(super) mod click;
 mod link_decos;
 pub(super) mod links;
