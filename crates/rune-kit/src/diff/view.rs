@@ -461,7 +461,7 @@ impl View {
         }
         row()
             .w_full()
-            .min_h(LINE_H)
+            .min_h(self.look.font.line_height)
             .items_start()
             .fill(fill)
             .hover(l.hover)
@@ -478,7 +478,7 @@ impl View {
         let half = |side: Side, c: Option<Cell<'a>>| -> El {
             let l = &self.look;
             let key = if side == Side::Old { "old" } else { "new" };
-            let mut h = row().key(key).w_frac(if single.is_some() { 1.0 } else { 0.5 }).min_w(0.0).min_h(LINE_H).items_start().self_stretch();
+            let mut h = row().key(key).w_frac(if single.is_some() { 1.0 } else { 0.5 }).min_w(0.0).min_h(self.look.font.line_height).items_start().self_stretch();
             let Some(c) = c else {
                 return h.fill(l.empty_bg);
             };
@@ -508,7 +508,7 @@ impl View {
             }
             h
         };
-        let line = row().w_full().min_h(LINE_H).items_stretch();
+        let line = row().w_full().min_h(self.look.font.line_height).items_stretch();
         // An added or deleted file has one side: it takes the whole width, as one column.
         match single {
             Some(Side::Old) => line.child(half(Side::Old, old)),
@@ -534,7 +534,7 @@ impl View {
     fn number(&self, st: &DiffState, i: usize, f: usize, n: Option<u32>, side: Side, kind: LineKind, selected: bool, digits: u32) -> El {
         let l = &self.look;
         let unified = st.mode() == DiffMode::Unified;
-        let mut c = row().w(l.number_w(digits)).min_h(LINE_H).self_stretch().px(8.0).justify_end().items_start().a11y_hidden();
+        let mut c = row().w(l.number_w(digits)).min_h(self.look.font.line_height).self_stretch().px(8.0).justify_end().items_start().a11y_hidden();
         if !unified {
             c = c.fill(l.gutter_fill(kind, selected));
         }

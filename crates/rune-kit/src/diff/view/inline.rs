@@ -5,7 +5,7 @@ use std::any::Any;
 use std::ops::RangeInclusive;
 use std::rc::Rc;
 
-use rune::{Color, El, col, row, text};
+use rune::{Color, El, TextStyle, col, row, text};
 
 use super::look::Look;
 use super::{DiffBind, FoldRow, GutterDrag, View};
@@ -41,11 +41,12 @@ pub struct InlineDiff<'a> {
     syntax: Option<SyntaxTheme>,
     first: [u32; 2],
     marks: Vec<RangeInclusive<u32>>,
+    font: Option<TextStyle>,
 }
 
 impl<'a> InlineDiff<'a> {
     pub fn new(state: &'a DiffState) -> InlineDiff<'a> {
-        InlineDiff { state, key: "diff".into(), numbers: true, most: INLINE_ROWS, fill: None, syntax: None, first: [1, 1], marks: Vec::new() }
+        InlineDiff { state, key: "diff".into(), numbers: true, most: INLINE_ROWS, fill: None, syntax: None, first: [1, 1], marks: Vec::new(), font: None }
     }
 
     /// The element key, unique in the window (`"diff"` by default).
@@ -86,6 +87,13 @@ impl<'a> InlineDiff<'a> {
         self
     }
 
+    /// Code and line numbers in `font`, each row as tall as its line height (13/20 mono by
+    /// default, as [`DiffView`](super::DiffView) draws them).
+    pub fn font(mut self, font: TextStyle) -> Self {
+        self.font = Some(font);
+        self
+    }
+
     /// Draw these new-side lines, numbered as shown, in the selected lines' tints: the lines a
     /// message points at.
     pub fn marked(mut self, lines: impl IntoIterator<Item = RangeInclusive<u32>>) -> Self {
@@ -99,8 +107,12 @@ impl<'a> InlineDiff<'a> {
     }
 
     pub fn build(self, k: &Kit) -> El {
-        let InlineDiff { state: st, key, numbers, most, fill, syntax, first, marks } = self;
+        let InlineDiff { state: st, key, numbers, most, fill, syntax, first, marks, font } = self;
         let look = Look::new(k, fill.unwrap_or(k.c.bg_base), syntax.unwrap_or_else(|| SyntaxTheme::from_kit(k)));
+        let look = match font {
+            Some(font) => look.with_font(font),
+            None => look,
+        };
         let version = (look.version, st.rev, st.keys_rev, numbers, most, first, marks.clone(), st.wraps(), st.selection());
         rune::memo(key.clone(), version, move || {
             let view = View { look, fold_row: FoldRow::Summary, numbers, first, headers: false, totals: false, marks, bind: Box::new(Inert) };

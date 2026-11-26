@@ -1,0 +1,1 @@
+- Diff word changes take one deeper tint of their side's colour (0.42 of the way from the background to the danger or success hue in light, 0.45 in dark, from 0.27 and 0.32), so a changed word reads as red or green whatever its syntax colour. `InlineDiff::font` draws code and line numbers in a given style, each row as tall as its line height.

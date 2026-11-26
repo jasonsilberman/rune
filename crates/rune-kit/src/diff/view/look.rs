@@ -62,7 +62,7 @@ impl Look {
         let tints = |hue: Color, fg: Color| Tints {
             line: tint(bg, hue, if dark { 0.13 } else { 0.1 }),
             gutter: tint(bg, hue, if dark { 0.2 } else { 0.17 }),
-            word: tint(bg, hue, if dark { 0.32 } else { 0.27 }),
+            word: tint(bg, hue, if dark { 0.45 } else { 0.42 }),
             number: tint(c.text_muted, hue, 0.7),
             bar: hue,
             count: fg,
@@ -121,6 +121,16 @@ impl Look {
             (false, Some(t)) => t.gutter,
             (false, None) => self.bg,
         }
+    }
+
+    /// Code and line numbers in `font`, rows at its line height.
+    pub(super) fn with_font(mut self, font: TextStyle) -> Look {
+        self.font = font;
+        self.adv = 0.6 * font.size;
+        let mut h = std::hash::DefaultHasher::new();
+        (self.version, font).hash(&mut h);
+        self.version = h.finish();
+        self
     }
 
     /// One line-number column for numbers of `digits` digits.
