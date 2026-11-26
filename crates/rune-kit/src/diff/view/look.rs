@@ -62,7 +62,7 @@ impl Look {
         let tints = |hue: Color, fg: Color| Tints {
             line: tint(bg, hue, if dark { 0.13 } else { 0.1 }),
             gutter: tint(bg, hue, if dark { 0.2 } else { 0.17 }),
-            word: tint(bg, hue, if dark { 0.45 } else { 0.42 }),
+            word: tint(bg, hue, if dark { 0.26 } else { 0.28 }),
             number: tint(c.text_muted, hue, 0.7),
             bar: hue,
             count: fg,

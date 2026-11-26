@@ -94,8 +94,9 @@ impl<'a> InlineDiff<'a> {
         self
     }
 
-    /// Draw these new-side lines, numbered as shown, in the selected lines' tints: the lines a
-    /// message points at.
+    /// Mark these new-side lines, numbered as shown, as the lines a message points at: their
+    /// gutter and numbers take the selected lines' tint and ink, an added or removed line keeps
+    /// its own tint, and an unchanged one takes the selected row tint.
     pub fn marked(mut self, lines: impl IntoIterator<Item = RangeInclusive<u32>>) -> Self {
         self.marks = lines.into_iter().collect();
         self

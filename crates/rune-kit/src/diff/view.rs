@@ -427,9 +427,14 @@ impl View {
 
     fn unified(&self, st: &DiffState, i: usize, f: usize, c: Cell<'_>) -> El {
         let l = &self.look;
-        let selected = st.row_selected(i, None) || c.new.is_some_and(|n| self.marked(n));
+        let cited = c.new.is_some_and(|n| self.marked(n));
+        let selected = st.row_selected(i, None) || cited;
         let tints = l.tints(c.kind);
-        let fill = if selected { l.selected } else { tints.map_or(l.bg, |t| t.line) };
+        let fill = match (st.row_selected(i, None), cited, tints) {
+            (true, _, _) | (false, true, None) => l.selected,
+            (false, _, Some(t)) => t.line,
+            (false, false, None) => l.bg,
+        };
         let digits = self.digits(st, f);
         let copy = match c.kind {
             LineKind::Context => true,
