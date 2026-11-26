@@ -1,0 +1,1 @@
+- `PaneState::range(w, w)` fixes a pane at one width: `SplitView` draws no resize grip for it, so a narrow list pane (a version history) can't be dragged wider.

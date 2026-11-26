@@ -886,3 +886,17 @@ fn select_only_rows_skip_tab_and_keep_an_outside_field_focused() {
     assert_eq!(focused(&rt), ["input"], "selection change never pulls focus from the field");
     assert!(row(&rt, 0).item_selected && !row(&rt, 2).item_selected);
 }
+
+#[test]
+fn a_pane_fixed_to_one_width_has_no_grip() {
+    let mut s = state();
+    s.inspector = PaneState::new(300.0).range(300.0, 300.0);
+    let mut rt = runtime(s);
+    settle(&mut rt);
+    let keys: Vec<String> = rt.elements().iter().filter_map(|e| e.key.clone()).collect();
+    assert!(keys.iter().any(|k| k == "inspector-body"), "the fixed inspector is open: {keys:?}");
+    assert!(!keys.iter().any(|k| k == "inspector-grip"), "a fixed inspector has no grip");
+    rt.update(|s, _| s.inspector = PaneState::new(300.0).range(200.0, 400.0));
+    settle(&mut rt);
+    assert!(rt.find("inspector-grip").is_some(), "a resizable inspector has its grip");
+}
