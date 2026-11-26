@@ -673,7 +673,7 @@ fn dock(d: &Dock, key: &str, p: Pane, leading: bool, content: Contents) -> El {
                 .child(el().key("pane-open-main").size(0.0, 0.0).a11y_hidden().transition(instant).focus_return("main-pane"));
         }
     }
-    if open || s.is_resizing() {
+    if (open || s.is_resizing()) && s.min_width() < s.max_width() {
         let mut grip = el()
             .key(if leading { "sidebar-grip" } else { "inspector-grip" })
             .role("separator")

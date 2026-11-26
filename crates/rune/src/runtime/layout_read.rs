@@ -405,6 +405,15 @@ impl RuntimeCore {
 
     fn layout_of(&self, nodes: &[Node], index: Option<&KeyIndex>, key: &str) -> Option<[f32; 4]> {
         if key == SELECTION { return None; }
+        if let Some((offset, key)) = super::selection::caret_at::caret_read(key) {
+            let i = match index {
+                Some(index) => index.first(nodes, key),
+                None => key_index::scan_first(nodes, key),
+            }?;
+            let at = self.placed(nodes, i, false);
+            let caret = Self::caret_in(nodes, i, offset, self.env.scale)?;
+            return Some([at[0] + caret[0], at[1] + caret[1], caret[2], caret[3]]);
+        }
         let (key, scrolled) = key.strip_prefix(WINDOW).map_or((key, false), |key| (key, true));
         let first = match index {
             Some(index) => index.first(nodes, key),

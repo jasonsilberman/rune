@@ -85,6 +85,7 @@ impl PaneState {
     }
     /// Its width range. The width and the default clamp into it, from the values given to
     /// [`Self::new`] and [`Self::with_width`], so `new(640.0).range(360.0, 960.0)` is 640.
+    /// A range of one width fixes the pane: `range(300.0, 300.0)` draws no resize grip.
     pub fn range(mut self, min: f32, max: f32) -> Self {
         self.min = min.max(1.0);
         self.max = max.max(self.min);
